@@ -1,5 +1,15 @@
 import type { DecoderConfig } from '../types'
 import type { ReadKind, ReadResult } from '../view-models'
+import { decoderTypeOrder } from './decoder-order'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Checkbox } from './ui/checkbox'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 
 const readKinds: { label: string; value: ReadKind; code: string }[] = [
   { label: 'Coils', value: 'coils', code: '01' },
@@ -29,12 +39,11 @@ type Props = {
   onAutoConnectChange: (value: boolean) => void
 }
 
-type Cell = { value: string; colSpan: number }
+type Cell = { value: string; colSpan: number; fullValue?: string }
 
 type RenderRow = {
   label: string
   cells: Cell[]
-  tone?: string
 }
 
 export default function ReadPanel({
@@ -58,126 +67,120 @@ export default function ReadPanel({
   onAutoConnectChange,
 }: Props) {
   const rows = buildRows(lastResult, decoders, addressBase, addressFormat, valueBase, columns)
+  const canRead = connected && !addressError && !quantityError
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Read operations</p>
-          <h2 className="text-xl font-semibold">Manual read</h2>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            <input
-              type="checkbox"
-              checked={autoConnect}
-              onChange={(event) => onAutoConnectChange(event.target.checked)}
-              className="h-4 w-4 accent-slate-900"
-            />
-            Auto connect
-          </label>
-          <button
-            className={`rounded-full px-5 py-2 text-sm font-semibold ${
-              connected && !addressError && !quantityError
-                ? 'bg-slate-900 text-white'
-                : 'cursor-not-allowed bg-slate-200 text-slate-400'
-            }`}
-            onClick={onRead}
-            disabled={!connected || Boolean(addressError) || Boolean(quantityError)}
-          >
-            Read now
-          </button>
-        </div>
-      </div>
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <div className="space-y-2 md:col-span-2">
-          <label className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Function</label>
-          <select
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            value={selectedKind}
-            onChange={(event) => onKindChange(event.target.value as ReadKind)}
-          >
-            {readKinds.map((kind) => (
-              <option key={kind.value} value={kind.value}>
-                {kind.code} | {kind.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-2 md:col-span-1">
-          <label className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Start address</label>
-          <input
-            type="text"
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            value={addressInput}
-            onChange={(event) => onAddressChange(event.target.value)}
-            placeholder="0x10 or 16"
-          />
-        </div>
-        <div className="space-y-2 md:col-span-1">
-          <label className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Quantity</label>
-          <input
-            type="number"
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            value={quantity}
-            onChange={(event) => onQuantityChange(Number(event.target.value))}
-          />
-          {quantityError && <p className="text-[11px] font-semibold text-rose-600">{quantityError}</p>}
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <p className="text-[11px] text-slate-500">Prefix hex with 0x, decimal otherwise.</p>
-        {addressError && <p className="text-[11px] font-semibold text-rose-600">{addressError}</p>}
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-500">
-          <span>Values</span>
-          <span>{lastResult ? new Date(lastResult.completedAt).toLocaleTimeString() : '—'}</span>
-        </div>
-        {lastResult?.errorMessage ? (
-          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-            {lastResult.errorMessage}
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardDescription>Read operations</CardDescription>
+            <CardTitle>Manual read</CardTitle>
           </div>
-        ) : rows.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">No data read yet.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full border-collapse text-xs">
-              <thead>
-                <tr className="text-left text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                  <th className="px-2 py-1">Base</th>
-                  {Array.from({ length: columns }).map((_, index) => (
-                    <th key={index} className="px-2 py-1">
-                      +{index}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, rowIndex) => (
-                  <tr key={`${row.label}-${rowIndex}`} className={row.tone ?? ''}>
-                    <td className="whitespace-nowrap border-t border-slate-200 px-2 py-1 font-semibold text-slate-600">
-                      {row.label}
-                    </td>
-                    {row.cells.map((cell, cellIndex) => (
-                      <td
-                        key={`${rowIndex}-${cellIndex}`}
-                        colSpan={cell.colSpan}
-                        className="border-t border-slate-200 px-2 py-1 font-mono text-[11px] text-slate-900"
-                      >
-                        {cell.value}
-                      </td>
-                    ))}
-                  </tr>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="auto-connect"
+                checked={autoConnect}
+                onCheckedChange={(value) => onAutoConnectChange(Boolean(value))}
+              />
+              <Label htmlFor="auto-connect">Auto connect</Label>
+            </div>
+            <Button size="sm" onClick={onRead} disabled={!canRead}>
+              Read now
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-1 md:col-span-2">
+            <Label htmlFor="read-kind">Function</Label>
+            <Select value={selectedKind} onValueChange={(value) => onKindChange(value as ReadKind)}>
+              <SelectTrigger className="w-full" id="read-kind">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {readKinds.map((kind) => (
+                  <SelectItem key={kind.value} value={kind.value}>
+                    {kind.code} | {kind.label}
+                  </SelectItem>
                 ))}
-              </tbody>
-            </table>
+              </SelectContent>
+            </Select>
           </div>
-        )}
-      </div>
-    </div>
+          <div className="grid gap-1 md:col-span-1">
+            <Label htmlFor="start-address">Start address</Label>
+            <Input
+              id="start-address"
+              type="text"
+              value={addressInput}
+              onChange={(event) => onAddressChange(event.target.value)}
+              placeholder="0x10 or 16"
+            />
+          </div>
+          <div className="grid gap-1 md:col-span-1">
+            <Label htmlFor="quantity">Quantity</Label>
+            <Input
+              id="quantity"
+              type="number"
+              value={quantity}
+              onChange={(event) => onQuantityChange(Number(event.target.value))}
+            />
+            {quantityError && <Badge variant="destructive">{quantityError}</Badge>}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <small>Prefix hex address with 0x, decimal otherwise.</small>
+          {addressError && <Badge variant="destructive">{addressError}</Badge>}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span>Values</span>
+            <Badge variant="outline">{lastResult ? new Date(lastResult.completedAt).toLocaleTimeString() : '—'}</Badge>
+          </div>
+          {lastResult?.errorMessage ? (
+            <Badge variant="destructive">{lastResult.errorMessage}</Badge>
+          ) : rows.length === 0 ? (
+            <p>No data read yet.</p>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Base</TableHead>
+                  {Array.from({ length: columns }).map((_, index) => (
+                    <TableHead key={index}>+{index}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row, rowIndex) => (
+                  <TableRow key={`${row.label}-${rowIndex}`}>
+                    <TableCell className="w-24">{row.label}</TableCell>
+                    {row.cells.map((cell, cellIndex) => (
+                      <TableCell key={`${rowIndex}-${cellIndex}`} colSpan={cell.colSpan}>
+                        {cell.fullValue ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <code className="cursor-help">{cell.value}</code>
+                            </TooltipTrigger>
+                            <TooltipContent>{cell.fullValue}</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <code>{cell.value}</code>
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -194,6 +197,10 @@ function buildRows(
   }
   const rows: RenderRow[] = []
   const values = result.regValues ?? result.boolValues?.map((value) => (value ? 1 : 0)) ?? []
+  const orderIndex = (type: string) => {
+    const index = decoderTypeOrder.indexOf(type as (typeof decoderTypeOrder)[number])
+    return index === -1 ? Number.MAX_SAFE_INTEGER : index
+  }
 
   for (let offset = 0; offset < values.length; offset += columns) {
     const slice = values.slice(offset, offset + columns)
@@ -203,7 +210,9 @@ function buildRows(
       cells: slice.map((value) => ({ value: formatValue(value, valueBase), colSpan: 1 })),
     })
 
-    const enabledDecoders = decoders.filter((decoder) => decoder.enabled)
+    const enabledDecoders = decoders
+      .filter((decoder) => decoder.enabled)
+      .sort((left, right) => orderIndex(left.type) - orderIndex(right.type))
     if (enabledDecoders.length && result.regValues) {
       const regSlice = result.regValues.slice(offset, offset + columns)
       for (const decoder of enabledDecoders) {
@@ -211,7 +220,6 @@ function buildRows(
         rows.push({
           label: `↳ ${decoder.type}`,
           cells: decoded,
-          tone: 'bg-white/60',
         })
       }
     }
@@ -252,14 +260,17 @@ function decodeRegisters(regs: number[], decoder: DecoderConfig, columns: number
         : [first >> 8, first & 0xff, second >> 8, second & 0xff]
       const view = new DataView(new Uint8Array(bytes).buffer)
       let value: string
+      let fullValue: string | undefined
       if (decoder.type === 'uint32') {
         value = `${view.getUint32(0, false)}`
       } else if (decoder.type === 'int32') {
         value = `${view.getInt32(0, false)}`
       } else {
-        value = `${view.getFloat32(0, false).toFixed(4)}`
+        const raw = view.getFloat32(0, false)
+        value = formatFloat(raw)
+        fullValue = `${raw}`
       }
-      cells.push({ value, colSpan: 2 })
+      cells.push({ value, colSpan: 2, fullValue })
     }
     if (cells.length === 0) {
       cells.push({ value: '—', colSpan: columns })
@@ -272,4 +283,14 @@ function decodeRegisters(regs: number[], decoder: DecoderConfig, columns: number
 function toInt16(value: number) {
   const masked = value & 0xffff
   return masked & 0x8000 ? masked - 0x10000 : masked
+}
+
+function formatFloat(value: number) {
+  if (!Number.isFinite(value)) {
+    return String(value)
+  }
+  if (Math.abs(value) >= 1e21) {
+    return value.toExponential(3)
+  }
+  return value.toFixed(3)
 }

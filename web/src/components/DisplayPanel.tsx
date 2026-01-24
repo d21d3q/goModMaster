@@ -1,4 +1,5 @@
 import type { Config } from '../types'
+import { Button } from './ui/button'
 
 type Props = {
   config: Config | null
@@ -17,86 +18,60 @@ export default function DisplayPanel({
   onAddressFormatChange,
   onValueBaseChange,
 }: Props) {
+  const activeVariant = (active: boolean) => (active ? 'default' : 'outline')
+
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold">Addressing</h2>
-      <div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-        <div className="flex items-center gap-2">
+    <div className="space-y-2">
+      <h3>Addressing</h3>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
           <span>Base</span>
           <div className="flex gap-2">
-            <button
-              className={`rounded-xl border px-3 py-2 ${
-                config?.addressBase === 1 ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white'
-              }`}
-              onClick={() => onAddressBaseChange(1)}
-            >
+            <Button size="sm" variant={activeVariant(config?.addressBase === 1)} onClick={() => onAddressBaseChange(1)}>
               1
-            </button>
-            <button
-              className={`rounded-xl border px-3 py-2 ${
-                config?.addressBase === 0 ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white'
-              }`}
-              onClick={() => onAddressBaseChange(0)}
-            >
+            </Button>
+            <Button size="sm" variant={activeVariant(config?.addressBase === 0)} onClick={() => onAddressBaseChange(0)}>
               0
-            </button>
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
           <span>Addr</span>
           <div className="flex gap-2">
-            <button
-              className={`rounded-xl border px-3 py-2 ${
-                config?.addressFormat === 10 ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white'
-              }`}
+            <Button
+              size="sm"
+              variant={activeVariant(config?.addressFormat === 10)}
               onClick={() => onAddressFormatChange(10)}
             >
               Dec
-            </button>
-            <button
-              className={`rounded-xl border px-3 py-2 ${
-                config?.addressFormat === 16 ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white'
-              }`}
+            </Button>
+            <Button
+              size="sm"
+              variant={activeVariant(config?.addressFormat === 16)}
               onClick={() => onAddressFormatChange(16)}
             >
               Hex
-            </button>
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
           <span>Value</span>
           <div className="flex gap-2">
-            <button
-              className={`rounded-xl border px-3 py-2 ${
-                config?.valueBase === 10 ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white'
-              }`}
-              onClick={() => onValueBaseChange(10)}
-            >
+            <Button size="sm" variant={activeVariant(config?.valueBase === 10)} onClick={() => onValueBaseChange(10)}>
               Dec
-            </button>
-            <button
-              className={`rounded-xl border px-3 py-2 ${
-                config?.valueBase === 16 ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white'
-              }`}
-              onClick={() => onValueBaseChange(16)}
-            >
+            </Button>
+            <Button size="sm" variant={activeVariant(config?.valueBase === 16)} onClick={() => onValueBaseChange(16)}>
               Hex
-            </button>
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
           <span>Cols</span>
           <div className="flex gap-2">
-            {[8, 16].map((count) => (
-              <button
-                key={count}
-                className={`rounded-xl border px-3 py-2 ${
-                  columns === count ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white'
-                }`}
-                onClick={() => onColumnsChange(count)}
-              >
+            {[4, 8, 16].map((count) => (
+              <Button size="sm" key={count} variant={activeVariant(columns === count)} onClick={() => onColumnsChange(count)}>
                 {count}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

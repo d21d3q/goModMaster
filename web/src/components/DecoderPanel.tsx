@@ -1,6 +1,7 @@
 import type { DecoderConfig } from '../types'
-
-const decoderTypes = ['uint16', 'int16', 'uint32', 'int32', 'float32']
+import { decoderTypeOrder } from './decoder-order'
+import { Checkbox } from './ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 
 const endiannessOptions = [
   { label: 'BE', value: 'big' },
@@ -27,40 +28,40 @@ export default function DecoderPanel({ decoders, onUpdate }: Props) {
     }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      {decoderTypes.map((type) => {
+    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2">
+      {decoderTypeOrder.map((type) => {
         const decoder = findDecoder(type)
         return (
-          <div key={type} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
-            <input
-              type="checkbox"
+          <div key={type} className="contents">
+            <Checkbox
               checked={Boolean(decoder.enabled)}
-              onChange={() => onUpdate({ ...decoder, enabled: !decoder.enabled })}
-              className="h-4 w-4 accent-slate-900"
+              onCheckedChange={(value) => onUpdate({ ...decoder, enabled: Boolean(value) })}
             />
-            <span className="uppercase tracking-[0.2em] text-slate-500">{type}</span>
-            <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px]"
-              value={decoder.endianness}
-              onChange={(event) => onUpdate({ ...decoder, endianness: event.target.value })}
-            >
-              {endiannessOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px]"
-              value={decoder.wordOrder}
-              onChange={(event) => onUpdate({ ...decoder, wordOrder: event.target.value })}
-            >
-              {wordOrderOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <span className="truncate">{type}</span>
+            <Select value={decoder.endianness} onValueChange={(value) => onUpdate({ ...decoder, endianness: value })}>
+              <SelectTrigger size="sm" className="w-16">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {endiannessOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={decoder.wordOrder} onValueChange={(value) => onUpdate({ ...decoder, wordOrder: value })}>
+              <SelectTrigger size="sm" className="w-16">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {wordOrderOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )
       })}

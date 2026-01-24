@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { Config } from '../types'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 
 type Props = {
   config: Config | null
@@ -30,42 +34,45 @@ export default function ConfigForm({ config, onSave, connected }: Props) {
   }, [draft?.protocol])
 
   if (!draft) {
-    return <p className="text-sm text-slate-500">Waiting for config...</p>
+    return <p>Waiting for config...</p>
   }
 
   const update = (partial: Partial<Config>) => {
     setDraft({ ...draft, ...partial })
   }
 
+  const actionLabel = connected ? 'Apply & reconnect' : 'Apply'
+
   return (
-    <div className="flex flex-wrap items-center gap-3 text-sm">
-      <div className="min-w-[120px]">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Protocol</label>
-        <select
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
-          value={draft.protocol}
-          onChange={(event) => update({ protocol: event.target.value as 'tcp' | 'rtu' })}
-        >
-          <option value="tcp">TCP</option>
-          <option value="rtu">RTU</option>
-        </select>
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-1">
+        <Label htmlFor="protocol">Protocol</Label>
+        <Select value={draft.protocol} onValueChange={(value) => update({ protocol: value as 'tcp' | 'rtu' })}>
+          <SelectTrigger className="w-full" id="protocol">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="tcp">TCP</SelectItem>
+            <SelectItem value="rtu">RTU</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {draft.protocol === 'tcp' ? (
         <>
-          <div className="min-w-[180px] flex-1">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Host</label>
-            <input
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
+          <div className="grid gap-1 md:col-span-2">
+            <Label htmlFor="tcp-host">Host</Label>
+            <Input
+              id="tcp-host"
               value={draft.tcp.host}
               onChange={(event) => update({ tcp: { ...draft.tcp, host: event.target.value } })}
             />
           </div>
-          <div className="min-w-[110px]">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Port</label>
-            <input
+          <div className="grid gap-1">
+            <Label htmlFor="tcp-port">Port</Label>
+            <Input
+              id="tcp-port"
               type="number"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
               value={draft.tcp.port}
               onChange={(event) => update({ tcp: { ...draft.tcp, port: Number(event.target.value) } })}
             />
@@ -74,98 +81,104 @@ export default function ConfigForm({ config, onSave, connected }: Props) {
       ) : (
         <>
           {serialDevices.length > 0 && (
-            <div className="min-w-[200px] flex-1">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Detected</label>
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
-                value=""
-                onChange={(event) => update({ serial: { ...draft.serial, device: event.target.value } })}
+            <div className="grid gap-1 md:col-span-2">
+              <Label htmlFor="serial-detected">Detected</Label>
+              <Select
+                value={serialDevices.includes(draft.serial.device) ? draft.serial.device : ''}
+                onValueChange={(value) => update({ serial: { ...draft.serial, device: value } })}
               >
-                <option value="">Select device</option>
-                {serialDevices.map((device) => (
-                  <option key={device} value={device}>
-                    {device}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full" id="serial-detected">
+                  <SelectValue placeholder="Select device" />
+                </SelectTrigger>
+                <SelectContent>
+                  {serialDevices.map((device) => (
+                    <SelectItem key={device} value={device}>
+                      {device}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
-          <div className="min-w-[180px] flex-1">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Device</label>
-            <input
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
+          <div className="grid gap-1 md:col-span-2">
+            <Label htmlFor="serial-device">Device</Label>
+            <Input
+              id="serial-device"
               value={draft.serial.device}
               onChange={(event) => update({ serial: { ...draft.serial, device: event.target.value } })}
               placeholder="/dev/ttyUSB0"
             />
           </div>
-          <div className="min-w-[110px]">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Speed</label>
-            <input
+          <div className="grid gap-1">
+            <Label htmlFor="serial-speed">Speed</Label>
+            <Input
+              id="serial-speed"
               type="number"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
               value={draft.serial.speed}
               onChange={(event) => update({ serial: { ...draft.serial, speed: Number(event.target.value) } })}
             />
           </div>
-          <div className="min-w-[80px]">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Data</label>
-            <input
+          <div className="grid gap-1">
+            <Label htmlFor="serial-data">Data</Label>
+            <Input
+              id="serial-data"
               type="number"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
               value={draft.serial.dataBits}
               onChange={(event) => update({ serial: { ...draft.serial, dataBits: Number(event.target.value) } })}
             />
           </div>
-          <div className="min-w-[80px]">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Stop</label>
-            <input
+          <div className="grid gap-1">
+            <Label htmlFor="serial-stop">Stop</Label>
+            <Input
+              id="serial-stop"
               type="number"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
               value={draft.serial.stopBits}
               onChange={(event) => update({ serial: { ...draft.serial, stopBits: Number(event.target.value) } })}
             />
           </div>
-          <div className="min-w-[110px]">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Parity</label>
-            <select
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
+          <div className="grid gap-1">
+            <Label htmlFor="serial-parity">Parity</Label>
+            <Select
               value={draft.serial.parity}
-              onChange={(event) => update({ serial: { ...draft.serial, parity: event.target.value } })}
+              onValueChange={(value) => update({ serial: { ...draft.serial, parity: value } })}
             >
-              <option value="none">None</option>
-              <option value="even">Even</option>
-              <option value="odd">Odd</option>
-            </select>
+              <SelectTrigger className="w-full" id="serial-parity">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="even">Even</SelectItem>
+                <SelectItem value="odd">Odd</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </>
       )}
 
-      <div className="min-w-[90px]">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Unit</label>
-        <input
+      <div className="grid gap-1">
+        <Label htmlFor="unit-id">Unit</Label>
+        <Input
+          id="unit-id"
           type="number"
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
           value={draft.unitId}
           onChange={(event) => update({ unitId: Number(event.target.value) })}
         />
       </div>
-      <div className="min-w-[120px]">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Timeout</label>
-        <input
+      <div className="grid gap-1">
+        <Label htmlFor="timeout-ms">Timeout</Label>
+        <Input
+          id="timeout-ms"
           type="number"
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
           value={draft.timeoutMs}
           onChange={(event) => update({ timeoutMs: Number(event.target.value) })}
         />
       </div>
 
-      <button
-        className="rounded-full bg-slate-900 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white"
-        onClick={() => onSave(draft)}
-      >
-        Apply
-      </button>
+      <div className="flex items-center justify-end md:col-span-2">
+        <Button size="sm" onClick={() => onSave(draft)}>
+          {actionLabel}
+        </Button>
+      </div>
     </div>
   )
 }

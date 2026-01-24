@@ -2,11 +2,26 @@ import { useEffect, useState } from 'react'
 import ConfigForm from './components/ConfigForm'
 import DecoderPanel from './components/DecoderPanel'
 import DisplayPanel from './components/DisplayPanel'
-import RawLog from './components/RawLog'
 import ReadPanel from './components/ReadPanel'
 import StatsPanel from './components/StatsPanel'
+import { Badge } from './components/ui/badge'
+import { Button } from './components/ui/button'
+import { Github } from 'lucide-react'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarProvider,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+} from './components/ui/sidebar'
 import type { Config } from './types'
-import type { LogEntry, ReadKind, ReadResult, Stats, WsEvent } from './view-models'
+import type { ReadKind, ReadResult, Stats, WsEvent } from './view-models'
 
 type ConfigResponse = {
   config: Config
@@ -23,7 +38,6 @@ function App() {
   const [addressInput, setAddressInput] = useState('0')
   const [quantity, setQuantity] = useState(1)
   const [lastResult, setLastResult] = useState<ReadResult | null>(null)
-  const [logs, setLogs] = useState<LogEntry[]>([])
   const [stats, setStats] = useState<Stats>({ readCount: 0, errorCount: 0, lastLatencyMs: 0 })
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
@@ -75,10 +89,6 @@ function App() {
       if (payload.type === 'data') {
         setLastResult(payload.payload as ReadResult)
       }
-      if (payload.type === 'log') {
-        const entry = payload.payload as LogEntry
-        setLogs((prev) => [...prev.slice(-499), entry])
-      }
       if (payload.type === 'stats') {
         setStats(payload.payload as Stats)
       }
@@ -103,9 +113,7 @@ function App() {
   }, [token])
 
   const updateConfig = (next: Config, reconnect: boolean) => {
-    const headers = token
-      ? { 'Content-Type': 'application/json', 'X-GMM-Token': token }
-      : { 'Content-Type': 'application/json' }
+    const headers = buildJsonHeaders(token)
     fetch(`${baseUrl}/api/config`, {
       method: 'POST',
       headers,
@@ -162,9 +170,7 @@ function App() {
       quantity,
       unitId: config.unitId,
     }
-    const headers = token
-      ? { 'Content-Type': 'application/json', 'X-GMM-Token': token }
-      : { 'Content-Type': 'application/json' }
+    const headers = buildJsonHeaders(token)
 
     const runRead = () =>
       fetch(`${baseUrl}/api/read`, {
@@ -201,10 +207,14 @@ function App() {
 
   const updateDecoder = (nextDecoder: { type: string; endianness: string; wordOrder: string; enabled: boolean }) => {
     if (!config) return
-    const existing = config.decoders.filter((decoder) => decoder.type !== nextDecoder.type)
+    const index = config.decoders.findIndex((decoder) => decoder.type === nextDecoder.type)
+    const decoders =
+      index >= 0
+        ? config.decoders.map((decoder, idx) => (idx === index ? nextDecoder : decoder))
+        : [...config.decoders, nextDecoder]
     const next = {
       ...config,
-      decoders: [...existing, nextDecoder],
+      decoders,
     }
     updateConfig(next, false)
   }
@@ -243,62 +253,67 @@ function App() {
     }
   }
 
+  const statusLabel = connected ? 'online' : connecting ? 'connecting' : 'offline'
+  const statusVariant = connected ? 'default' : connecting ? 'secondary' : 'outline'
+  const actionVariant = connected || connecting ? 'secondary' : 'default'
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-slate-500">goModMaster</p>
-            <h1 className="text-2xl font-semibold">Real-time Modbus diagnostics</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">
-              {connected ? 'online' : connecting ? 'connecting' : 'offline'}
-            </div>
-            <button
-              className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                connected
-                  ? 'bg-emerald-500 text-white'
-                  : connecting
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-slate-900 text-white'
-              }`}
-              onClick={connected || connecting ? handleDisconnect : handleConnect}
-            >
-              {connected || connecting ? 'Disconnect' : 'Connect'}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-5">
-        <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">Connection settings</h2>
-          </div>
-          <div className="mt-2">
-            <ConfigForm config={config} onSave={(next) => updateConfig(next, connected)} connected={connected} />
-          </div>
-          <div className="mt-3 border-t border-slate-200 pt-3">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Interpretations</h3>
-            </div>
-            <div className="mt-2">
+    <SidebarProvider defaultOpen>
+      <Sidebar collapsible="offcanvas" variant="inset">
+        <SidebarHeader>
+          <span>Settings</span>
+        </SidebarHeader>
+        <SidebarSeparator />
+        <SidebarContent className="overflow-x-hidden">
+          <SidebarGroup>
+            <SidebarGroupLabel>Connection settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <ConfigForm config={config} onSave={(next) => updateConfig(next, connected)} connected={connected} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+          <SidebarSeparator />
+          <SidebarGroup>
+            <SidebarGroupLabel>Interpretations</SidebarGroupLabel>
+            <SidebarGroupContent>
               <DecoderPanel decoders={config?.decoders ?? []} onUpdate={updateDecoder} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+          <SidebarSeparator />
+          <SidebarGroup>
+            <SidebarGroupLabel>Addressing</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <DisplayPanel
+                config={config}
+                columns={columns}
+                onColumnsChange={setColumns}
+                onAddressBaseChange={setAddressBase}
+                onAddressFormatChange={setAddressFormat}
+                onValueBaseChange={setValueBase}
+              />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarRail />
+      </Sidebar>
+      <SidebarInset className="min-h-svh">
+        <header className="p-4 border-b">
+          <div className="mx-auto flex w-full items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger />
+              <div>
+                <h1>GoModMaster</h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={statusVariant}>{statusLabel}</Badge>
+              <Button size="sm" variant={actionVariant} onClick={connected || connecting ? handleDisconnect : handleConnect}>
+                {connected || connecting ? 'Disconnect' : 'Connect'}
+              </Button>
             </div>
           </div>
-        </div>
-
-        <DisplayPanel
-          config={config}
-          columns={columns}
-          onColumnsChange={setColumns}
-          onAddressBaseChange={setAddressBase}
-          onAddressFormatChange={setAddressFormat}
-          onValueBaseChange={setValueBase}
-        />
-        <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
-          <section className="space-y-4">
+        </header>
+        <main className="flex-1 p-4">
+          <div className="mx-auto w-full space-y-4">
             <ReadPanel
               selectedKind={selectedKind}
               addressInput={addressInput}
@@ -319,30 +334,33 @@ function App() {
               onRead={handleRead}
               onAutoConnectChange={setAutoConnect}
             />
-            <RawLog logs={logs} />
-          </section>
-          <aside className="space-y-6"></aside>
-        </div>
-      </main>
-
-      <div className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-3 text-xs text-slate-500">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <span>goModMaster {version ? `v${version}` : 'MVP'} · read-only</span>
-            <span>{error ? `Last error: ${error}` : 'Ready for requests'}</span>
-            {lastResult && (
-              <span className="text-slate-600">
-                Last: {lastResult.kind} @ {lastResult.address} · {lastResult.latencyMs} ms
+          </div>
+        </main>
+        <footer className="border-t p-4">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <StatsPanel stats={stats} />
+              <span className="flex items-center gap-2">
+                goModMaster {version ? `v${version}` : 'MVP'}
+                <a
+                  href="https://github.com/d21d3q/goModMaster"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="goModMaster on GitHub"
+                >
+                  <Github className="h-4 w-4" />
+                </a>
               </span>
+            </div>
+            {invocation && (
+              <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                <code>{invocation}</code>
+              </pre>
             )}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <StatsPanel stats={stats} />
-          </div>
-          {invocation && <div className="font-mono text-[11px] text-slate-600">{invocation}</div>}
-        </div>
-      </div>
-    </div>
+        </footer>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
@@ -380,6 +398,16 @@ function apiPost(path: string, token: string | null): Promise<any> {
     }
     return data
   })
+}
+
+function buildJsonHeaders(token: string | null): HeadersInit {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (token) {
+    headers['X-GMM-Token'] = token
+  }
+  return headers
 }
 
 export default App
