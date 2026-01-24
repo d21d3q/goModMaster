@@ -141,7 +141,7 @@ export default function ReadPanel({
             <span>Values</span>
             <Badge variant="outline">{lastResult ? new Date(lastResult.completedAt).toLocaleTimeString() : '—'}</Badge>
           </div>
-          {lastResult?.errorMessage ? (
+          {lastResult?.errorMessage && lastResult.errorKind !== 'connection' ? (
             <Badge variant="destructive">{lastResult.errorMessage}</Badge>
           ) : rows.length === 0 ? (
             <p>No data read yet.</p>

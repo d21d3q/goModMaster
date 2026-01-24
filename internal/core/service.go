@@ -3,7 +3,10 @@ package core
 import (
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"gomodmaster/internal/config"
@@ -74,8 +77,15 @@ func (s *Service) UpdateConfig(cfg config.Config) {
 
 func (s *Service) Connect() error {
 	s.mu.Lock()
-	if s.client != nil || s.connecting {
+	alreadyConnected := s.client != nil
+	alreadyConnecting := s.connecting
+	if alreadyConnected || alreadyConnecting {
 		s.mu.Unlock()
+		if alreadyConnected {
+			s.logInfo("connect requested: already connected")
+		} else {
+			s.logInfo("connect requested: already connecting")
+		}
 		return nil
 	}
 	stop := make(chan struct{})
@@ -83,6 +93,7 @@ func (s *Service) Connect() error {
 	s.connecting = true
 	s.mu.Unlock()
 
+	s.logInfo("connect requested: starting loop")
 	s.emitStatus()
 	go s.connectLoop(stop)
 	return nil
@@ -98,6 +109,7 @@ func (s *Service) Disconnect() error {
 	s.lastConnError = ""
 	s.mu.Unlock()
 
+	s.logInfo("disconnect requested")
 	if stop != nil {
 		close(stop)
 	}
@@ -200,10 +212,12 @@ func (s *Service) finishWithError(result ReadResult, start time.Time, err error)
 	result.CompletedAt = time.Now()
 	result.LatencyMs = time.Since(start).Milliseconds()
 	result.ErrorMessage = err.Error()
+	result.ErrorKind = errorKind(err)
 
 	s.updateStats(result.LatencyMs, result.ErrorMessage)
 	s.logError(err.Error())
 	s.emit(Event{Type: EventError, Payload: result})
+	s.maybeReconnect(err)
 	return result, err
 }
 
@@ -265,11 +279,19 @@ func (s *Service) logError(msg string) {
 	s.emit(Event{Type: EventLog, Payload: entry})
 }
 
+func (s *Service) logInfo(msg string) {
+	entry := LogEntry{Time: time.Now(), Direction: "sys", Message: msg}
+	s.logs.Add(entry)
+	s.emit(Event{Type: EventLog, Payload: entry})
+}
+
 func (s *Service) connectLoop(stop <-chan struct{}) {
 	backoff := 500 * time.Millisecond
+	attempt := 0
 	for {
 		select {
 		case <-stop:
+			s.logInfo("connect stopped")
 			return
 		default:
 		}
@@ -278,6 +300,8 @@ func (s *Service) connectLoop(stop <-chan struct{}) {
 		cfg := s.config
 		s.mu.Unlock()
 
+		attempt++
+		s.logInfo(fmt.Sprintf("connect attempt %d: %s", attempt, connectionSummary(cfg)))
 		client, err := newClient(cfg)
 		if err == nil {
 			err = client.Open()
@@ -289,6 +313,7 @@ func (s *Service) connectLoop(stop <-chan struct{}) {
 			s.connecting = false
 			s.lastConnError = ""
 			s.mu.Unlock()
+			s.logInfo("connect succeeded")
 			s.emitStatus()
 			return
 		}
@@ -314,6 +339,7 @@ func (s *Service) connectLoop(stop <-chan struct{}) {
 
 func (s *Service) emitStatus() {
 	status := s.statusSnapshot()
+	s.logInfo(fmt.Sprintf("status: connected=%t connecting=%t lastError=%q", status.Connected, status.Connecting, status.LastError))
 	s.emit(Event{Type: EventStatus, Payload: status})
 }
 
@@ -325,6 +351,55 @@ func (s *Service) statusSnapshot() ConnectionStatus {
 		Connecting: s.connecting,
 		LastError:  s.lastConnError,
 	}
+}
+
+func (s *Service) StatusSnapshot() ConnectionStatus {
+	return s.statusSnapshot()
+}
+
+func (s *Service) maybeReconnect(err error) {
+	if !isConnectionError(err) {
+		return
+	}
+	s.mu.Lock()
+	alreadyConnecting := s.connecting
+	hasClient := s.client != nil
+	s.mu.Unlock()
+	if !hasClient || alreadyConnecting {
+		return
+	}
+	s.logInfo("connection lost; reconnecting")
+	go func() {
+		_ = s.Disconnect()
+		s.mu.Lock()
+		s.lastConnError = err.Error()
+		s.mu.Unlock()
+		s.emitStatus()
+		_ = s.Connect()
+	}()
+}
+
+func errorKind(err error) string {
+	if isConnectionError(err) {
+		return "connection"
+	}
+	return "modbus"
+}
+
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNABORTED) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "use of closed network connection")
 }
 
 func applyAddressBase(addr uint16, base config.AddressBase) uint16 {
@@ -360,6 +435,25 @@ func newClient(cfg config.Config) (*modbus.ModbusClient, error) {
 	}
 	_ = client.SetUnitId(cfg.UnitID)
 	return client, nil
+}
+
+func connectionSummary(cfg config.Config) string {
+	switch cfg.Protocol {
+	case config.ProtocolRTU:
+		return fmt.Sprintf(
+			"rtu://%s speed=%d data=%d stop=%d parity=%s timeout=%dms",
+			cfg.Serial.Device,
+			cfg.Serial.Speed,
+			cfg.Serial.DataBits,
+			cfg.Serial.StopBits,
+			cfg.Serial.Parity,
+			cfg.TimeoutMs,
+		)
+	case config.ProtocolTCP:
+		return fmt.Sprintf("tcp://%s:%d timeout=%dms", cfg.TCP.Host, cfg.TCP.Port, cfg.TimeoutMs)
+	default:
+		return fmt.Sprintf("unknown protocol: %s", cfg.Protocol)
+	}
 }
 
 func parseParity(value string) uint {

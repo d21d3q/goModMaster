@@ -41,13 +41,20 @@ func (h *Hub) Run(events <-chan core.Event) {
 	}
 }
 
-func (h *Hub) Handle(c echo.Context) error {
+func (h *Hub) Handle(c echo.Context, initialEvents ...core.Event) error {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		return err
+	}
+
+	for _, event := range initialEvents {
+		if err := conn.WriteJSON(event); err != nil {
+			_ = conn.Close()
+			return err
+		}
 	}
 
 	h.register <- conn

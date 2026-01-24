@@ -28,7 +28,7 @@ export default function DecoderPanel({ decoders, onUpdate }: Props) {
     }
 
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2">
+    <div className="grid grid-cols-[auto_minmax(0,7rem)_auto_auto] items-center gap-2">
       {decoderTypeOrder.map((type) => {
         const decoder = findDecoder(type)
         return (
@@ -39,7 +39,7 @@ export default function DecoderPanel({ decoders, onUpdate }: Props) {
             />
             <span className="truncate">{type}</span>
             <Select value={decoder.endianness} onValueChange={(value) => onUpdate({ ...decoder, endianness: value })}>
-              <SelectTrigger size="sm" className="w-16">
+              <SelectTrigger size="sm" className="w-20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -51,7 +51,7 @@ export default function DecoderPanel({ decoders, onUpdate }: Props) {
               </SelectContent>
             </Select>
             <Select value={decoder.wordOrder} onValueChange={(value) => onUpdate({ ...decoder, wordOrder: value })}>
-              <SelectTrigger size="sm" className="w-16">
+              <SelectTrigger size="sm" className="w-20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

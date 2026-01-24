@@ -1,5 +1,7 @@
+import { CircleHelp } from 'lucide-react'
 import type { Config } from '../types'
 import { Button } from './ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 
 type Props = {
   config: Config | null
@@ -22,10 +24,28 @@ export default function DisplayPanel({
 
   return (
     <div className="space-y-2">
-      <h3>Addressing</h3>
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span>Base</span>
+          <div className="flex items-center gap-1">
+            <span>Base</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring size-5 inline-flex items-center justify-center rounded-sm"
+                  aria-label="Base addressing help"
+                >
+                  <CircleHelp className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="space-y-1 text-xs">
+                  <div>Base 0: use address as entered.</div>
+                  <div>Base 1: subtract 1 from address (except 0).</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <div className="flex gap-2">
             <Button size="sm" variant={activeVariant(config?.addressBase === 1)} onClick={() => onAddressBaseChange(1)}>
               1

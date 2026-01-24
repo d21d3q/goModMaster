@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import ConfigForm from './components/ConfigForm'
 import DecoderPanel from './components/DecoderPanel'
 import DisplayPanel from './components/DisplayPanel'
+import RawLog from './components/RawLog'
 import ReadPanel from './components/ReadPanel'
 import StatsPanel from './components/StatsPanel'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
-import { Github } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from './components/ui/tooltip'
+import { CircleHelp, Github } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -21,11 +23,18 @@ import {
   SidebarTrigger,
 } from './components/ui/sidebar'
 import type { Config } from './types'
-import type { ReadKind, ReadResult, Stats, WsEvent } from './view-models'
+import type { LogEntry, ReadKind, ReadResult, Stats, WsEvent } from './view-models'
 
 type ConfigResponse = {
   config: Config
   invocation: string
+}
+
+type PendingRead = {
+  kind: ReadKind
+  address: number
+  quantity: number
+  unitId: number
 }
 
 const baseUrl = ''
@@ -38,15 +47,18 @@ function App() {
   const [addressInput, setAddressInput] = useState('0')
   const [quantity, setQuantity] = useState(1)
   const [lastResult, setLastResult] = useState<ReadResult | null>(null)
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [stats, setStats] = useState<Stats>({ readCount: 0, errorCount: 0, lastLatencyMs: 0 })
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
-  const [error, setError] = useState('')
   const [autoConnect, setAutoConnect] = useState(true)
   const [columns, setColumns] = useState(8)
   const [version, setVersion] = useState('')
+  const [connectionError, setConnectionError] = useState('')
   const [addressError, setAddressError] = useState('')
   const [quantityError, setQuantityError] = useState('')
+  const [showLogs, setShowLogs] = useState(false)
+  const [pendingRead, setPendingRead] = useState<PendingRead | null>(null)
 
   useEffect(() => {
     const headers = token ? { 'X-GMM-Token': token } : undefined
@@ -56,19 +68,11 @@ function App() {
         setConfig(data.config)
         setInvocation(data.invocation)
       })
-      .catch((err) => setError(err.message))
+      .catch(() => undefined)
 
     fetch(`${baseUrl}/api/stats`, { headers })
       .then((res) => res.json())
       .then((data: Stats) => setStats(data))
-      .catch(() => undefined)
-
-    fetch(`${baseUrl}/api/status`, { headers })
-      .then((res) => res.json())
-      .then((data: { connected: boolean; connecting: boolean }) => {
-        setConnected(data.connected)
-        setConnecting(data.connecting)
-      })
       .catch(() => undefined)
 
     fetch(`${baseUrl}/api/version`, { headers })
@@ -89,20 +93,26 @@ function App() {
       if (payload.type === 'data') {
         setLastResult(payload.payload as ReadResult)
       }
+      if (payload.type === 'log') {
+        const entry = payload.payload as LogEntry
+        setLogs((prev) => [...prev.slice(-499), entry])
+      }
       if (payload.type === 'stats') {
         setStats(payload.payload as Stats)
       }
       if (payload.type === 'error') {
         const result = payload.payload as ReadResult
         setLastResult(result)
-        setError(result.errorMessage ?? 'Unknown error')
       }
       if (payload.type === 'status') {
         const status = payload.payload as { connected: boolean; connecting: boolean; lastError?: string }
-        setConnected(Boolean(status.connected))
-        setConnecting(Boolean(status.connecting))
-        if (status.lastError) {
-          setError(status.lastError)
+        const isConnected = Boolean(status.connected)
+        const isConnecting = Boolean(status.connecting)
+        setConnected(isConnected)
+        setConnecting(isConnecting)
+        setConnectionError(typeof status.lastError === 'string' ? status.lastError : '')
+        if (!isConnected && !isConnecting) {
+          setPendingRead(null)
         }
       }
     }
@@ -124,34 +134,45 @@ function App() {
         setConfig(data.config)
         setInvocation(data.invocation)
         if (reconnect) {
-          return apiPost('/api/disconnect', token)
-            .then(() => apiPost('/api/connect', token))
-            .then((data) => {
-              setConnected(Boolean(data.connected))
-              setConnecting(Boolean(data.connecting))
-            })
+          return apiPost('/api/disconnect', token).then(() => apiPost('/api/connect', token))
         }
       })
-      .catch((err) => setError(err.message))
+      .catch(() => undefined)
   }
 
   const handleConnect = () => {
-    apiPost('/api/connect', token)
-      .then((data) => {
-        setConnected(Boolean(data.connected))
-        setConnecting(Boolean(data.connecting))
-      })
-      .catch((err) => setError(err.message))
+    apiPost('/api/connect', token).catch(() => undefined)
   }
 
   const handleDisconnect = () => {
-    apiPost('/api/disconnect', token)
-      .then((data) => {
-        setConnected(Boolean(data.connected))
-        setConnecting(Boolean(data.connecting))
-      })
-      .catch((err) => setError(err.message))
+    apiPost('/api/disconnect', token).catch(() => undefined)
   }
+
+  const runRead = useCallback(
+    (payload: PendingRead) => {
+      const headers = buildJsonHeaders(token)
+      return fetch(`${baseUrl}/api/read`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+        .then((res) => res.json())
+        .then((data: ReadResult) => {
+          setLastResult(data)
+        })
+        .catch(() => undefined)
+    },
+    [token],
+  )
+
+  useEffect(() => {
+    if (!pendingRead || !connected) {
+      return
+    }
+    const payload = pendingRead
+    setPendingRead(null)
+    runRead(payload)
+  }, [pendingRead, connected, runRead])
 
   const handleRead = () => {
     if (!config) return
@@ -170,39 +191,16 @@ function App() {
       quantity,
       unitId: config.unitId,
     }
-    const headers = buildJsonHeaders(token)
-
-    const runRead = () =>
-      fetch(`${baseUrl}/api/read`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      })
-        .then((res) => res.json())
-        .then((data: ReadResult) => {
-          setLastResult(data)
-        })
-        .catch((err) => setError(err.message))
 
     if (!connected && autoConnect) {
-      apiPost('/api/connect', token)
-        .then((data) => {
-          const isConnected = Boolean(data.connected)
-          setConnected(isConnected)
-          setConnecting(Boolean(data.connecting))
-          if (!isConnected) {
-            return
-          }
-          return runRead()
-        })
-        .catch((err) => setError(err.message))
+      setPendingRead(payload)
+      apiPost('/api/connect', token).catch(() => undefined)
       return
     }
     if (!connected) {
-      setError('Not connected')
       return
     }
-    runRead()
+    runRead(payload)
   }
 
   const updateDecoder = (nextDecoder: { type: string; endianness: string; wordOrder: string; enabled: boolean }) => {
@@ -260,20 +258,47 @@ function App() {
   return (
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="offcanvas" variant="inset">
-        <SidebarHeader>
+        <SidebarHeader className="flex h-12 flex-row items-center gap-0 border-b px-4 py-0">
           <span>Settings</span>
         </SidebarHeader>
-        <SidebarSeparator />
         <SidebarContent className="overflow-x-hidden">
-          <SidebarGroup>
-            <SidebarGroupLabel>Connection settings</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <ConfigForm config={config} onSave={(next) => updateConfig(next, connected)} connected={connected} />
-            </SidebarGroupContent>
-          </SidebarGroup>
+            <SidebarGroup>
+              <SidebarGroupLabel>Connection settings</SidebarGroupLabel>
+              <SidebarGroupContent>
+              <ConfigForm
+                config={config}
+                onSave={(next) => updateConfig(next, connected || connecting)}
+                connected={connected}
+                connecting={connecting}
+              />
+              </SidebarGroupContent>
+            </SidebarGroup>
           <SidebarSeparator />
           <SidebarGroup>
-            <SidebarGroupLabel>Interpretations</SidebarGroupLabel>
+            <SidebarGroupLabel>
+              <span className="flex items-center gap-1">
+                Interpretations
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring size-5 inline-flex items-center justify-center rounded-sm"
+                      aria-label="Interpretation shortcuts"
+                    >
+                      <CircleHelp className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="space-y-1 text-xs">
+                      <div>BE = big endian</div>
+                      <div>LE = little endian</div>
+                      <div>HF = high first</div>
+                      <div>LF = low first</div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </span>
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <DecoderPanel decoders={config?.decoders ?? []} onUpdate={updateDecoder} />
             </SidebarGroupContent>
@@ -295,24 +320,31 @@ function App() {
         </SidebarContent>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset className="min-h-svh">
-        <header className="p-4 border-b">
-          <div className="mx-auto flex w-full items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+      <SidebarInset className="min-w-0 md:peer-data-[variant=inset]:my-0 pt-2">
+        <header className="border-b px-4">
+          <div className="mx-auto flex h-12 w-full min-w-0 items-center gap-4">
+            <div className="flex items-center gap-2 shrink-0">
               <SidebarTrigger />
               <div>
                 <h1>GoModMaster</h1>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={statusVariant}>{statusLabel}</Badge>
-              <Button size="sm" variant={actionVariant} onClick={connected || connecting ? handleDisconnect : handleConnect}>
-                {connected || connecting ? 'Disconnect' : 'Connect'}
-              </Button>
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+              {connectionError && (
+                <span className="min-w-0 max-w-[320px] flex-1 truncate text-xs text-destructive" title={connectionError}>
+                  {connectionError}
+                </span>
+              )}
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant={statusVariant}>{statusLabel}</Badge>
+                <Button size="sm" variant={actionVariant} onClick={connected || connecting ? handleDisconnect : handleConnect}>
+                  {connected || connecting ? 'Disconnect' : 'Connect'}
+                </Button>
+              </div>
             </div>
           </div>
         </header>
-        <main className="flex-1 p-4">
+        <section className="flex-1 p-4">
           <div className="mx-auto w-full space-y-4">
             <ReadPanel
               selectedKind={selectedKind}
@@ -335,11 +367,23 @@ function App() {
               onAutoConnectChange={setAutoConnect}
             />
           </div>
-        </main>
+        </section>
+        {showLogs && (
+          <div className="border-t bg-background p-4 sticky bottom-0">
+            <div className="mx-auto w-full max-w-6xl">
+              <RawLog logs={logs} />
+            </div>
+          </div>
+        )}
         <footer className="border-t p-4">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <StatsPanel stats={stats} />
+              <div className="flex items-center gap-3">
+                <StatsPanel stats={stats} />
+                <Button size="sm" variant="outline" onClick={() => setShowLogs((prev) => !prev)}>
+                  {showLogs ? 'Hide logs' : 'Show logs'} ({logs.length})
+                </Button>
+              </div>
               <span className="flex items-center gap-2">
                 goModMaster {version ? `v${version}` : 'MVP'}
                 <a

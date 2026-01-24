@@ -9,13 +9,14 @@ type Props = {
   config: Config | null
   onSave: (config: Config) => void
   connected: boolean
+  connecting: boolean
 }
 
 type SerialDevicesResponse = {
   devices: string[]
 }
 
-export default function ConfigForm({ config, onSave, connected }: Props) {
+export default function ConfigForm({ config, onSave, connected, connecting }: Props) {
   const [draft, setDraft] = useState<Config | null>(config)
   const [serialDevices, setSerialDevices] = useState<string[]>([])
 
@@ -41,7 +42,7 @@ export default function ConfigForm({ config, onSave, connected }: Props) {
     setDraft({ ...draft, ...partial })
   }
 
-  const actionLabel = connected ? 'Apply & reconnect' : 'Apply'
+  const actionLabel = connected || connecting ? 'Apply & reconnect' : 'Apply'
 
   return (
     <div className="grid gap-3 md:grid-cols-2">

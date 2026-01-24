@@ -28,6 +28,7 @@ type ReadResult struct {
 	LatencyMs    int64          `json:"latencyMs"`
 	CompletedAt  time.Time      `json:"completedAt"`
 	ErrorMessage string         `json:"errorMessage,omitempty"`
+	ErrorKind    string         `json:"errorKind,omitempty"`
 }
 
 type Stats struct {

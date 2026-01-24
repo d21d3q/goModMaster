@@ -95,7 +95,9 @@ func routes(e *echo.Echo, service *core.Service, hub *ws.Hub) {
 	})
 
 	e.GET("/ws", func(c echo.Context) error {
-		return hub.Handle(c)
+		status := service.StatusSnapshot()
+		event := core.Event{Type: core.EventStatus, Payload: status}
+		return hub.Handle(c, event)
 	})
 }
 

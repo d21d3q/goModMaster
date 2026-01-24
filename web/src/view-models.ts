@@ -10,6 +10,7 @@ export type ReadResult = {
   latencyMs: number
   completedAt: string
   errorMessage?: string
+  errorKind?: string
 }
 
 export type LogEntry = {
