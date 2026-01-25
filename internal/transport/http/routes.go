@@ -19,8 +19,16 @@ type configResponse struct {
 	Invocation string        `json:"invocation"`
 }
 
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
 type serialDevicesResponse struct {
 	Devices []string `json:"devices"`
+}
+
+type versionResponse struct {
+	Version string `json:"version"`
 }
 
 func routes(e *echo.Echo, service *core.Service, hub *ws.Hub) {
@@ -32,7 +40,7 @@ func routes(e *echo.Echo, service *core.Service, hub *ws.Hub) {
 	e.POST("/api/config", func(c echo.Context) error {
 		var cfg config.Config
 		if err := c.Bind(&cfg); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
 		}
 		current := service.Config()
 		if cfg.RequireToken && cfg.Token == "" {
@@ -44,30 +52,24 @@ func routes(e *echo.Echo, service *core.Service, hub *ws.Hub) {
 
 	e.POST("/api/connect", func(c echo.Context) error {
 		if err := service.Connect(); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		}
-		return c.JSON(http.StatusOK, map[string]any{
-			"connected":  service.IsConnected(),
-			"connecting": service.IsConnecting(),
-		})
+		return c.JSON(http.StatusOK, service.StatusSnapshot())
 	})
 
 	e.POST("/api/disconnect", func(c echo.Context) error {
 		if err := service.Disconnect(); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		}
-		return c.JSON(http.StatusOK, map[string]any{
-			"connected":  service.IsConnected(),
-			"connecting": service.IsConnecting(),
-		})
+		return c.JSON(http.StatusOK, service.StatusSnapshot())
 	})
 
 	e.POST("/api/read", func(c echo.Context) error {
 		var req core.ReadRequest
 		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
 		}
-		result, err := service.Read(req)
+		result, err := service.Read(c.Request().Context(), req)
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, result)
 		}
@@ -79,15 +81,11 @@ func routes(e *echo.Echo, service *core.Service, hub *ws.Hub) {
 	})
 
 	e.GET("/api/status", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]any{
-			"connected":  service.IsConnected(),
-			"connecting": service.IsConnecting(),
-			"lastError":  service.LastConnectError(),
-		})
+		return c.JSON(http.StatusOK, service.StatusSnapshot())
 	})
 
 	e.GET("/api/version", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"version": version.Version})
+		return c.JSON(http.StatusOK, versionResponse{Version: version.Version})
 	})
 
 	e.GET("/api/serial-devices", func(c echo.Context) error {

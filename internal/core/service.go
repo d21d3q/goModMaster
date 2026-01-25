@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,10 +22,10 @@ const defaultLogSize = 0
 type EventType string
 
 const (
-	EventData  EventType = "data"
-	EventLog   EventType = "log"
-	EventStats EventType = "stats"
-	EventError EventType = "error"
+	EventData   EventType = "data"
+	EventLog    EventType = "log"
+	EventStats  EventType = "stats"
+	EventError  EventType = "error"
 	EventStatus EventType = "status"
 )
 
@@ -34,12 +35,12 @@ type Event struct {
 }
 
 type Service struct {
-	mu     sync.Mutex
-	config config.Config
-	client *modbus.ModbusClient
-	logs   *LogBuffer
-	stats  Stats
-	events chan Event
+	mu            sync.Mutex
+	config        config.Config
+	client        *modbus.ModbusClient
+	logs          *LogBuffer
+	stats         Stats
+	events        chan Event
 	connecting    bool
 	connectStop   chan struct{}
 	lastConnError string
@@ -122,12 +123,16 @@ func (s *Service) Disconnect() error {
 	return err
 }
 
-func (s *Service) Read(req ReadRequest) (ReadResult, error) {
+func (s *Service) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
 	start := time.Now()
 	result := ReadResult{
 		Kind:     req.Kind,
 		Address:  req.Address,
 		Quantity: req.Quantity,
+	}
+
+	if err := ctx.Err(); err != nil {
+		return result, err
 	}
 
 	s.mu.Lock()
@@ -140,16 +145,18 @@ func (s *Service) Read(req ReadRequest) (ReadResult, error) {
 		return s.finishWithError(result, start, err)
 	}
 
-	if req.UnitID != 0 {
-		_ = client.SetUnitId(req.UnitID)
+	unit := req.UnitID
+	if unit != 0 {
+		_ = client.SetUnitId(unit)
 	} else {
-		_ = client.SetUnitId(cfg.UnitID)
+		unit = cfg.UnitID
+		_ = client.SetUnitId(unit)
 	}
 
 	addr := applyAddressBase(req.Address, cfg.AddressBase)
 
 	var err error
-	s.logRequest(req, addr)
+	s.logRequest(req, addr, unit)
 	switch req.Kind {
 	case ReadCoils:
 		result.BoolValues, err = client.ReadCoils(addr, req.Quantity)
@@ -240,11 +247,7 @@ func (s *Service) emit(event Event) {
 	}
 }
 
-func (s *Service) logRequest(req ReadRequest, addr uint16) {
-	unit := req.UnitID
-	if unit == 0 {
-		unit = s.config.UnitID
-	}
+func (s *Service) logRequest(req ReadRequest, addr uint16, unit uint8) {
 	msg := fmt.Sprintf("tx %s fc=%s addr=0x%04x qty=0x%04x unit=0x%02x", req.Kind, functionCode(req.Kind), addr, req.Quantity, unit)
 	entry := LogEntry{Time: time.Now(), Direction: "tx", Message: msg}
 	s.logs.Add(entry)

@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"net"
+	"net/http"
 	"os"
-	"sort"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"gomodmaster/internal/config"
 	"gomodmaster/internal/core"
+	"gomodmaster/internal/netutil"
 	httptransport "gomodmaster/internal/transport/http"
 	"gomodmaster/internal/transport/ws"
 	"gomodmaster/internal/version"
@@ -25,6 +30,7 @@ func main() {
 			return fmt.Errorf("tui mode not implemented yet")
 		},
 	}
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	addGlobalFlags(rootCmd, &cfg)
 	rootCmd.AddCommand(webCommand(&cfg))
@@ -100,20 +106,48 @@ func webCommand(cfg *config.Config) *cobra.Command {
 
 			service := core.NewService(*cfg)
 			hub := ws.NewHub()
-			go hub.Run(service.Events())
+
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			go hub.Run(ctx, service.Events())
 
 			e, err := httptransport.StartServer(service, hub)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				_ = service.Disconnect()
-			}()
 
 			current := service.Config()
 			announce(current)
 
-			return e.Start(current.ListenAddr)
+			serverErr := make(chan error, 1)
+			go func() {
+				serverErr <- e.Start(current.ListenAddr)
+			}()
+
+			select {
+			case err := <-serverErr:
+				_ = service.Disconnect()
+				if err != nil && !errors.Is(err, http.ErrServerClosed) {
+					return err
+				}
+				return nil
+			case <-ctx.Done():
+			}
+
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			if err := e.Shutdown(shutdownCtx); err != nil {
+				_ = service.Disconnect()
+				return err
+			}
+
+			_ = service.Disconnect()
+			err = <-serverErr
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				return err
+			}
+			return nil
 		},
 	}
 
@@ -134,7 +168,7 @@ func announce(cfg config.Config) {
 		fmt.Printf("Token suffix:\n/?token=%s\n", cfg.Token)
 	}
 
-	addresses := discoverIPv4()
+	addresses := netutil.DiscoverIPv4()
 	if len(addresses) == 0 {
 		fmt.Println("No external IPv4 addresses detected.")
 		return
@@ -148,80 +182,4 @@ func announce(cfg config.Config) {
 		}
 	}
 	fmt.Printf("Invocation: %s\n", cfg.Invocation())
-}
-
-func discoverIPv4() []string {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return nil
-	}
-
-	addresses := []string{}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagPointToPoint != 0 {
-			continue
-		}
-		name := strings.ToLower(iface.Name)
-		if strings.HasPrefix(name, "utun") || strings.HasPrefix(name, "docker") || strings.HasPrefix(name, "lo") {
-			continue
-		}
-		if !isPhysicalInterface(name) {
-			continue
-		}
-
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			ip := extractIPv4(addr)
-			if ip == "" {
-				continue
-			}
-			addresses = append(addresses, ip)
-		}
-	}
-
-	sort.Strings(addresses)
-	return uniqueStrings(addresses)
-}
-
-func isPhysicalInterface(name string) bool {
-	for _, prefix := range []string{"en", "eth", "wlan", "wl"} {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func extractIPv4(addr net.Addr) string {
-	var ip net.IP
-	switch v := addr.(type) {
-	case *net.IPNet:
-		ip = v.IP
-	case *net.IPAddr:
-		ip = v.IP
-	}
-	if ip == nil {
-		return ""
-	}
-	ip = ip.To4()
-	if ip == nil {
-		return ""
-	}
-	return ip.String()
-}
-
-func uniqueStrings(values []string) []string {
-	out := []string{}
-	seen := map[string]struct{}{}
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
 }

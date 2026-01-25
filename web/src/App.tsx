@@ -1,28 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import ConfigForm from './components/ConfigForm'
-import DecoderPanel from './components/DecoderPanel'
-import DisplayPanel from './components/DisplayPanel'
-import RawLog from './components/RawLog'
-import ReadPanel from './components/ReadPanel'
-import StatsPanel from './components/StatsPanel'
+import AppLayout from './components/AppLayout'
 import UnauthorizedPanel from './components/UnauthorizedPanel'
-import { Badge } from './components/ui/badge'
-import { Button } from './components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from './components/ui/tooltip'
-import { CircleHelp, Github } from 'lucide-react'
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInset,
-  SidebarProvider,
-  SidebarRail,
-  SidebarSeparator,
-  SidebarTrigger,
-} from './components/ui/sidebar'
+import { apiPost, buildJsonHeaders, fetchJson } from './lib/api'
+import { parseAddress } from './lib/parse'
 import type { Config } from './types'
 import type { LogEntry, ReadKind, ReadResult, Stats, WsEvent } from './view-models'
 
@@ -37,8 +17,6 @@ type PendingRead = {
   quantity: number
   unitId: number
 }
-
-const baseUrl = ''
 
 function App() {
   const token = new URLSearchParams(window.location.search).get('token')
@@ -270,232 +248,46 @@ function App() {
     }
   }
 
-  const statusLabel = connected ? 'online' : connecting ? 'connecting' : 'offline'
-  const statusVariant = connected ? 'default' : connecting ? 'secondary' : 'outline'
-  const actionVariant = connected || connecting ? 'secondary' : 'default'
-
   if (authBlocked) {
     return <UnauthorizedPanel />
   }
 
   return (
-    <SidebarProvider defaultOpen>
-      <Sidebar collapsible="offcanvas" variant="inset">
-        <SidebarHeader className="flex h-12 flex-row items-center gap-0 border-b px-4 py-0">
-          <span>Settings</span>
-        </SidebarHeader>
-        <SidebarContent className="overflow-x-hidden">
-            <SidebarGroup>
-              <SidebarGroupLabel>Connection settings</SidebarGroupLabel>
-              <SidebarGroupContent>
-              <ConfigForm
-                config={config}
-                onSave={(next) => updateConfig(next, connected || connecting)}
-                connected={connected}
-                connecting={connecting}
-                onUnauthorized={handleUnauthorized}
-              />
-              </SidebarGroupContent>
-            </SidebarGroup>
-          <SidebarSeparator />
-          <SidebarGroup>
-            <SidebarGroupLabel>
-              <span className="flex items-center gap-1">
-                Interpretations
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring size-5 inline-flex items-center justify-center rounded-sm"
-                      aria-label="Interpretation shortcuts"
-                    >
-                      <CircleHelp className="size-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="space-y-1 text-xs">
-                      <div>BE = big endian</div>
-                      <div>LE = little endian</div>
-                      <div>HF = high first</div>
-                      <div>LF = low first</div>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </span>
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <DecoderPanel decoders={config?.decoders ?? []} onUpdate={updateDecoder} />
-            </SidebarGroupContent>
-          </SidebarGroup>
-          <SidebarSeparator />
-          <SidebarGroup>
-            <SidebarGroupLabel>Addressing</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <DisplayPanel
-                config={config}
-                columns={columns}
-                onColumnsChange={setColumns}
-                onAddressBaseChange={setAddressBase}
-                onAddressFormatChange={setAddressFormat}
-                onValueBaseChange={setValueBase}
-              />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarRail />
-      </Sidebar>
-      <SidebarInset className="min-w-0 md:peer-data-[variant=inset]:my-0 pt-2">
-        <header className="border-b px-4">
-          <div className="mx-auto flex h-12 w-full min-w-0 items-center gap-4">
-            <div className="flex items-center gap-2 shrink-0">
-              <SidebarTrigger />
-              <div>
-                <h1>GoModMaster</h1>
-              </div>
-            </div>
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-              {connectionError && (
-                <span className="min-w-0 max-w-[320px] flex-1 truncate text-xs text-destructive" title={connectionError}>
-                  {connectionError}
-                </span>
-              )}
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant={statusVariant}>{statusLabel}</Badge>
-                <Button size="sm" variant={actionVariant} onClick={connected || connecting ? handleDisconnect : handleConnect}>
-                  {connected || connecting ? 'Disconnect' : 'Connect'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
-        <section className="flex-1 p-4">
-          <div className="mx-auto w-full space-y-4">
-            <ReadPanel
-              selectedKind={selectedKind}
-              addressInput={addressInput}
-              quantity={quantity}
-              addressBase={config?.addressBase ?? 0}
-              addressFormat={config?.addressFormat ?? 10}
-              valueBase={config?.valueBase ?? 10}
-              decoders={config?.decoders ?? []}
-              lastResult={lastResult}
-              columns={columns}
-              connected={connected}
-              autoConnect={autoConnect}
-              addressError={addressError}
-              quantityError={quantityError}
-              onKindChange={setSelectedKind}
-              onAddressChange={handleAddressChange}
-              onQuantityChange={handleQuantityChange}
-              onRead={handleRead}
-              onAutoConnectChange={setAutoConnect}
-            />
-          </div>
-        </section>
-        {showLogs && (
-          <div className="border-t bg-background p-4 sticky bottom-0">
-            <div className="mx-auto w-full max-w-6xl">
-              <RawLog logs={logs} />
-            </div>
-          </div>
-        )}
-        <footer className="border-t p-4">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <StatsPanel stats={stats} />
-                <Button size="sm" variant="outline" onClick={() => setShowLogs((prev) => !prev)}>
-                  {showLogs ? 'Hide logs' : 'Show logs'} ({logs.length})
-                </Button>
-              </div>
-              <span className="flex items-center gap-2">
-                goModMaster {version ? `v${version}` : 'MVP'}
-                <a
-                  href="https://github.com/d21d3q/goModMaster"
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="goModMaster on GitHub"
-                >
-                  <Github className="h-4 w-4" />
-                </a>
-              </span>
-            </div>
-            {invocation && (
-              <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
-                <code>{invocation}</code>
-              </pre>
-            )}
-          </div>
-        </footer>
-      </SidebarInset>
-    </SidebarProvider>
+    <AppLayout
+      config={config}
+      connected={connected}
+      connecting={connecting}
+      connectionError={connectionError}
+      logs={logs}
+      showLogs={showLogs}
+      stats={stats}
+      version={version}
+      invocation={invocation}
+      columns={columns}
+      selectedKind={selectedKind}
+      addressInput={addressInput}
+      quantity={quantity}
+      lastResult={lastResult}
+      autoConnect={autoConnect}
+      addressError={addressError}
+      quantityError={quantityError}
+      onSaveConfig={(next) => updateConfig(next, connected || connecting)}
+      onUnauthorized={handleUnauthorized}
+      onUpdateDecoder={updateDecoder}
+      onColumnsChange={setColumns}
+      onAddressBaseChange={setAddressBase}
+      onAddressFormatChange={setAddressFormat}
+      onValueBaseChange={setValueBase}
+      onKindChange={setSelectedKind}
+      onAddressChange={handleAddressChange}
+      onQuantityChange={handleQuantityChange}
+      onRead={handleRead}
+      onAutoConnectChange={setAutoConnect}
+      onToggleLogs={() => setShowLogs((prev) => !prev)}
+      onConnect={handleConnect}
+      onDisconnect={handleDisconnect}
+    />
   )
-}
-
-function parseAddress(input: string): number | null {
-  const trimmed = input.trim().toLowerCase()
-  if (trimmed === '') {
-    return null
-  }
-  if (trimmed.startsWith('0x')) {
-    const hex = trimmed.slice(2)
-    if (!/^[0-9a-f]+$/.test(hex)) {
-      return null
-    }
-    return Number.parseInt(hex, 16)
-  }
-  if (!/^[0-9]+$/.test(trimmed)) {
-    return null
-  }
-  const value = Number.parseInt(trimmed, 10)
-  if (Number.isNaN(value)) {
-    return null
-  }
-  return value
-}
-
-function apiPost(path: string, token: string | null, onUnauthorized?: () => void): Promise<any> {
-  return fetchJson(
-    path,
-    {
-      method: 'POST',
-      headers: token ? { 'X-GMM-Token': token } : undefined,
-    },
-    onUnauthorized,
-  )
-}
-
-async function fetchJson<T>(
-  path: string,
-  options: RequestInit,
-  onUnauthorized?: () => void,
-): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, options)
-  if (res.status === 401) {
-    if (onUnauthorized) {
-      onUnauthorized()
-    }
-    throw new Error('Unauthorized')
-  }
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    const message =
-      typeof (data as { error?: string })?.error === 'string'
-        ? (data as { error?: string }).error
-        : res.statusText
-    throw new Error(message || 'Request failed')
-  }
-  return data as T
-}
-
-function buildJsonHeaders(token: string | null): HeadersInit {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (token) {
-    headers['X-GMM-Token'] = token
-  }
-  return headers
 }
 
 export default App

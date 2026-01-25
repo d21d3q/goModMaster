@@ -1,7 +1,9 @@
 package ws
 
 import (
+	"context"
 	"net/http"
+	"sync"
 
 	"gomodmaster/internal/core"
 
@@ -13,6 +15,8 @@ type Hub struct {
 	clients    map[*websocket.Conn]bool
 	register   chan *websocket.Conn
 	unregister chan *websocket.Conn
+	done       chan struct{}
+	doneOnce   sync.Once
 }
 
 func NewHub() *Hub {
@@ -20,12 +24,17 @@ func NewHub() *Hub {
 		clients:    make(map[*websocket.Conn]bool),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
+		done:       make(chan struct{}),
 	}
 }
 
-func (h *Hub) Run(events <-chan core.Event) {
+func (h *Hub) Run(ctx context.Context, events <-chan core.Event) {
+	defer h.closeDone()
 	for {
 		select {
+		case <-ctx.Done():
+			h.closeAll()
+			return
 		case client := <-h.register:
 			h.clients[client] = true
 		case client := <-h.unregister:
@@ -57,9 +66,12 @@ func (h *Hub) Handle(c echo.Context, initialEvents ...core.Event) error {
 		}
 	}
 
-	h.register <- conn
+	if !h.registerConn(conn) {
+		_ = conn.Close()
+		return nil
+	}
 	go func() {
-		defer func() { h.unregister <- conn }()
+		defer func() { h.unregisterConn(conn) }()
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {
 				return
@@ -68,4 +80,34 @@ func (h *Hub) Handle(c echo.Context, initialEvents ...core.Event) error {
 	}()
 
 	return nil
+}
+
+func (h *Hub) closeAll() {
+	for client := range h.clients {
+		_ = client.Close()
+		delete(h.clients, client)
+	}
+}
+
+func (h *Hub) closeDone() {
+	h.doneOnce.Do(func() {
+		close(h.done)
+	})
+}
+
+func (h *Hub) registerConn(conn *websocket.Conn) bool {
+	select {
+	case h.register <- conn:
+		return true
+	case <-h.done:
+		return false
+	}
+}
+
+func (h *Hub) unregisterConn(conn *websocket.Conn) {
+	select {
+	case h.unregister <- conn:
+	case <-h.done:
+		_ = conn.Close()
+	}
 }
