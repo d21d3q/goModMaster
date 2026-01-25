@@ -10,6 +10,10 @@ Web-based Modbus master inspired by [QModMaster](https://sourceforge.net/project
 - [ ] Write operations (planned)
 - [ ] TUI mode (planned)
 
+## Install
+
+No install needed. Download the binary from latest [release](https://github.com/d21d3q/goModMaster/releases/latest) and run it.
+
 ## How to use
 
 Launch the web UI:
@@ -44,4 +48,3 @@ Global Flags:
       --unit-id uint    unit id (default 1)
       --version         print version and exit
 ```
-
