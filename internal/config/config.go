@@ -104,7 +104,7 @@ func DefaultConfig() Config {
 			{Type: DecoderInt32, Endianness: EndianBig, WordOrder: WordHighFirst, Enabled: false},
 			{Type: DecoderFloat32, Endianness: EndianBig, WordOrder: WordHighFirst, Enabled: false},
 		},
-		ListenAddr:   "0.0.0.0:8080",
+		ListenAddr:   "0.0.0.0:8502",
 		RequireToken: true,
 	}
 }

@@ -27,6 +27,8 @@ func StartServer(service *core.Service, hub *ws.Hub) (*echo.Echo, error) {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
+	e.Use(middleware.Gzip())
+	e.Use(cacheMiddleware())
 
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -34,10 +36,16 @@ func StartServer(service *core.Service, hub *ws.Hub) (*echo.Echo, error) {
 			if !config.RequireToken {
 				return next(c)
 			}
-			if hasValidToken(c, config.Token) {
-				return next(c)
+			if shouldRedirectToken(c) && trySetTokenCookie(c, config.Token) {
+				return redirectWithoutToken(c)
 			}
-			return echo.NewHTTPError(http.StatusUnauthorized, "missing or invalid token")
+			if isProtectedPath(c) {
+				if hasValidToken(c, config.Token) {
+					return next(c)
+				}
+				return echo.NewHTTPError(http.StatusUnauthorized, "missing or invalid token")
+			}
+			return next(c)
 		}
 	})
 
@@ -60,22 +68,7 @@ func ServeStatic(e *echo.Echo) error {
 		return err
 	}
 
-	fileServer := http.FileServer(http.FS(sub))
-	e.GET("/*", func(c echo.Context) error {
-		path := strings.TrimPrefix(c.Request().URL.Path, "/")
-		if path == "" || path == "/" {
-			path = "index.html"
-		}
-		if exists(sub, path) {
-			c.Request().URL.Path = "/" + path
-			fileServer.ServeHTTP(c.Response(), c.Request())
-			return nil
-		}
-
-		c.Request().URL.Path = "/index.html"
-		fileServer.ServeHTTP(c.Response(), c.Request())
-		return nil
-	})
+	e.GET("/*", echo.WrapHandler(http.FileServer(http.FS(sub))))
 
 	return nil
 }
@@ -109,13 +102,40 @@ func setTokenCookie(c echo.Context, token string) {
 	c.SetCookie(cookie)
 }
 
-func exists(files fs.FS, path string) bool {
-	file, err := files.Open(path)
-	if err != nil {
+func trySetTokenCookie(c echo.Context, token string) bool {
+	if token == "" {
 		return false
 	}
-	_ = file.Close()
+	if c.QueryParam("token") == token {
+		setTokenCookie(c, token)
+		return true
+	}
+	return false
+}
+
+func shouldRedirectToken(c echo.Context) bool {
+	if c.Request().Method != http.MethodGet {
+		return false
+	}
+	requestPath := c.Request().URL.Path
+	if strings.HasPrefix(requestPath, "/api/") || requestPath == "/ws" {
+		return false
+	}
 	return true
+}
+
+func isProtectedPath(c echo.Context) bool {
+	requestPath := c.Request().URL.Path
+	return strings.HasPrefix(requestPath, "/api/") || requestPath == "/ws"
+}
+
+func redirectWithoutToken(c echo.Context) error {
+	req := c.Request()
+	nextURL := *req.URL
+	query := nextURL.Query()
+	query.Del("token")
+	nextURL.RawQuery = query.Encode()
+	return c.Redirect(http.StatusFound, nextURL.RequestURI())
 }
 
 func generateToken(length int) string {
@@ -124,4 +144,15 @@ func generateToken(length int) string {
 		return ""
 	}
 	return hex.EncodeToString(buf)
+}
+
+func cacheMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if strings.HasPrefix(c.Request().URL.Path, "/assets/") {
+				c.Response().Header().Set("Cache-Control", "public, max-age=31536000")
+			}
+			return next(c)
+		}
+	}
 }

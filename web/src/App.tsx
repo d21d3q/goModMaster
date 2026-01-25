@@ -5,6 +5,7 @@ import DisplayPanel from './components/DisplayPanel'
 import RawLog from './components/RawLog'
 import ReadPanel from './components/ReadPanel'
 import StatsPanel from './components/StatsPanel'
+import UnauthorizedPanel from './components/UnauthorizedPanel'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from './components/ui/tooltip'
@@ -59,27 +60,39 @@ function App() {
   const [quantityError, setQuantityError] = useState('')
   const [showLogs, setShowLogs] = useState(false)
   const [pendingRead, setPendingRead] = useState<PendingRead | null>(null)
+  const [authBlocked, setAuthBlocked] = useState(() => window.location.hash === '#/401')
+
+  const handleUnauthorized = useCallback(() => {
+    setAuthBlocked(true)
+    window.location.hash = '#/401'
+  }, [])
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setAuthBlocked(window.location.hash === '#/401')
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
 
   useEffect(() => {
     const headers = token ? { 'X-GMM-Token': token } : undefined
-    fetch(`${baseUrl}/api/config`, { headers })
-      .then((res) => res.json())
+    fetchJson<ConfigResponse>('/api/config', { headers }, handleUnauthorized)
       .then((data: ConfigResponse) => {
         setConfig(data.config)
         setInvocation(data.invocation)
       })
       .catch(() => undefined)
 
-    fetch(`${baseUrl}/api/stats`, { headers })
-      .then((res) => res.json())
+    fetchJson<Stats>('/api/stats', { headers }, handleUnauthorized)
       .then((data: Stats) => setStats(data))
       .catch(() => undefined)
 
-    fetch(`${baseUrl}/api/version`, { headers })
-      .then((res) => res.json())
-      .then((data: { version: string }) => setVersion(data.version))
+    fetchJson<{ version: string }>('/api/version', { headers }, handleUnauthorized).then((data) =>
+      setVersion(data.version),
+    )
       .catch(() => undefined)
-  }, [token])
+  }, [handleUnauthorized, token])
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
@@ -124,45 +137,51 @@ function App() {
 
   const updateConfig = (next: Config, reconnect: boolean) => {
     const headers = buildJsonHeaders(token)
-    fetch(`${baseUrl}/api/config`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(next),
-    })
-      .then((res) => res.json())
+    fetchJson<ConfigResponse>(
+      '/api/config',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(next),
+      },
+      handleUnauthorized,
+    )
       .then((data: ConfigResponse) => {
         setConfig(data.config)
         setInvocation(data.invocation)
         if (reconnect) {
-          return apiPost('/api/disconnect', token).then(() => apiPost('/api/connect', token))
+          return apiPost('/api/disconnect', token, handleUnauthorized).then(() =>
+            apiPost('/api/connect', token, handleUnauthorized),
+          )
         }
       })
       .catch(() => undefined)
   }
 
   const handleConnect = () => {
-    apiPost('/api/connect', token).catch(() => undefined)
+    apiPost('/api/connect', token, handleUnauthorized).catch(() => undefined)
   }
 
   const handleDisconnect = () => {
-    apiPost('/api/disconnect', token).catch(() => undefined)
+    apiPost('/api/disconnect', token, handleUnauthorized).catch(() => undefined)
   }
 
   const runRead = useCallback(
     (payload: PendingRead) => {
       const headers = buildJsonHeaders(token)
-      return fetch(`${baseUrl}/api/read`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      })
-        .then((res) => res.json())
-        .then((data: ReadResult) => {
-          setLastResult(data)
-        })
+      return fetchJson<ReadResult>(
+        '/api/read',
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        },
+        handleUnauthorized,
+      )
+        .then((data: ReadResult) => setLastResult(data))
         .catch(() => undefined)
     },
-    [token],
+    [handleUnauthorized, token],
   )
 
   useEffect(() => {
@@ -194,7 +213,7 @@ function App() {
 
     if (!connected && autoConnect) {
       setPendingRead(payload)
-      apiPost('/api/connect', token).catch(() => undefined)
+      apiPost('/api/connect', token, handleUnauthorized).catch(() => undefined)
       return
     }
     if (!connected) {
@@ -255,6 +274,10 @@ function App() {
   const statusVariant = connected ? 'default' : connecting ? 'secondary' : 'outline'
   const actionVariant = connected || connecting ? 'secondary' : 'default'
 
+  if (authBlocked) {
+    return <UnauthorizedPanel />
+  }
+
   return (
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="offcanvas" variant="inset">
@@ -270,6 +293,7 @@ function App() {
                 onSave={(next) => updateConfig(next, connected || connecting)}
                 connected={connected}
                 connecting={connecting}
+                onUnauthorized={handleUnauthorized}
               />
               </SidebarGroupContent>
             </SidebarGroup>
@@ -430,18 +454,38 @@ function parseAddress(input: string): number | null {
   return value
 }
 
-function apiPost(path: string, token: string | null): Promise<any> {
-  return fetch(`${baseUrl}${path}`, {
-    method: 'POST',
-    headers: token ? { 'X-GMM-Token': token } : undefined,
-  }).then(async (res) => {
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      const message = typeof data?.error === 'string' ? data.error : res.statusText
-      throw new Error(message || 'Request failed')
+function apiPost(path: string, token: string | null, onUnauthorized?: () => void): Promise<any> {
+  return fetchJson(
+    path,
+    {
+      method: 'POST',
+      headers: token ? { 'X-GMM-Token': token } : undefined,
+    },
+    onUnauthorized,
+  )
+}
+
+async function fetchJson<T>(
+  path: string,
+  options: RequestInit,
+  onUnauthorized?: () => void,
+): Promise<T> {
+  const res = await fetch(`${baseUrl}${path}`, options)
+  if (res.status === 401) {
+    if (onUnauthorized) {
+      onUnauthorized()
     }
-    return data
-  })
+    throw new Error('Unauthorized')
+  }
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const message =
+      typeof (data as { error?: string })?.error === 'string'
+        ? (data as { error?: string }).error
+        : res.statusText
+    throw new Error(message || 'Request failed')
+  }
+  return data as T
 }
 
 function buildJsonHeaders(token: string | null): HeadersInit {

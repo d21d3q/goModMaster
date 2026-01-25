@@ -10,13 +10,14 @@ type Props = {
   onSave: (config: Config) => void
   connected: boolean
   connecting: boolean
+  onUnauthorized?: () => void
 }
 
 type SerialDevicesResponse = {
   devices: string[]
 }
 
-export default function ConfigForm({ config, onSave, connected, connecting }: Props) {
+export default function ConfigForm({ config, onSave, connected, connecting, onUnauthorized }: Props) {
   const [draft, setDraft] = useState<Config | null>(config)
   const [serialDevices, setSerialDevices] = useState<string[]>([])
 
@@ -29,10 +30,16 @@ export default function ConfigForm({ config, onSave, connected, connecting }: Pr
     const token = new URLSearchParams(window.location.search).get('token')
     const headers = token ? { 'X-GMM-Token': token } : undefined
     fetch('/api/serial-devices', { headers })
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 401) {
+          onUnauthorized?.()
+          throw new Error('Unauthorized')
+        }
+        return res.json()
+      })
       .then((data: SerialDevicesResponse) => setSerialDevices(data.devices ?? []))
       .catch(() => setSerialDevices([]))
-  }, [draft?.protocol])
+  }, [draft?.protocol, onUnauthorized])
 
   if (!draft) {
     return <p>Waiting for config...</p>

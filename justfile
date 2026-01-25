@@ -2,10 +2,11 @@ set dotenv-load := false
 
 default: build 
 
-web-build:
+web:
     cd web && npm run build
 
-gmm-build:
-    go build ./cmd/gmm -o build/gmm
+compile:
+    mkdir -p build
+    go build -o build/gmm ./cmd/gmm
 
-build: web-build gmm-build
+build: web compile
