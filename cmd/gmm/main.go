@@ -43,9 +43,9 @@ func main() {
 
 func addGlobalFlags(root *cobra.Command, cfg *config.Config) {
 	var (
-		useRTU    bool
 		serial    string
 		host      string
+		framing   string
 		parity    string
 		dataBits  uint
 		stopBits  uint
@@ -56,12 +56,12 @@ func addGlobalFlags(root *cobra.Command, cfg *config.Config) {
 		showVer   bool
 	)
 
-	root.PersistentFlags().BoolVar(&useRTU, "rtu", false, "use Modbus RTU over serial")
-	root.PersistentFlags().StringVar(&serial, "serial", cfg.Serial.Device, "serial device path")
+	root.PersistentFlags().StringVar(&serial, "serial", cfg.Serial.Device, "serial device path (enables serial mode)")
 	root.PersistentFlags().UintVar(&speed, "speed", cfg.Serial.Speed, "serial baud rate")
 	root.PersistentFlags().UintVar(&dataBits, "databits", cfg.Serial.DataBits, "serial data bits")
 	root.PersistentFlags().UintVar(&stopBits, "stopbits", cfg.Serial.StopBits, "serial stop bits")
 	root.PersistentFlags().StringVar(&parity, "parity", cfg.Serial.Parity, "serial parity (none, even, odd)")
+	root.PersistentFlags().StringVar(&framing, "framing", string(config.ProtocolRTU), "serial framing (rtu, ascii)")
 	root.PersistentFlags().StringVar(&host, "host", cfg.TCP.Host, "tcp host")
 	root.PersistentFlags().IntVar(&port, "port", cfg.TCP.Port, "tcp port")
 	root.PersistentFlags().UintVar(&unitID, "unit-id", uint(cfg.UnitID), "unit id")
@@ -73,7 +73,21 @@ func addGlobalFlags(root *cobra.Command, cfg *config.Config) {
 			fmt.Println(version.Version)
 			os.Exit(0)
 		}
-		if useRTU {
+		flags := cmd.Flags()
+		serialMode := flags.Changed("serial") ||
+			flags.Changed("speed") ||
+			flags.Changed("databits") ||
+			flags.Changed("stopbits") ||
+			flags.Changed("parity") ||
+			flags.Changed("framing")
+		tcpMode := flags.Changed("host") || flags.Changed("port")
+		if serialMode && tcpMode {
+			return fmt.Errorf("serial flags cannot be combined with --host/--port")
+		}
+		if serialMode {
+			if framing != string(config.ProtocolRTU) {
+				return fmt.Errorf("unsupported framing: %s", framing)
+			}
 			cfg.Protocol = config.ProtocolRTU
 		} else {
 			cfg.Protocol = config.ProtocolTCP

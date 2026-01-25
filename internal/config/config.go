@@ -88,10 +88,10 @@ func DefaultConfig() Config {
 		ValueBase:     ValueBaseDec,
 		Serial: SerialConfig{
 			Device:   "/dev/ttyUSB0",
-			Speed:    19200,
+			Speed:    9600,
 			DataBits: 8,
 			Parity:   "none",
-			StopBits: 2,
+			StopBits: 1,
 		},
 		TCP: TCPConfig{
 			Host: "127.0.0.1",
@@ -113,10 +113,7 @@ func (c Config) Invocation() string {
 	parts := []string{"gmm", "web"}
 	defaults := DefaultConfig()
 	if c.Protocol == ProtocolRTU {
-		parts = append(parts, "--rtu")
-		if c.Serial.Device != defaults.Serial.Device {
-			parts = append(parts, "--serial", c.Serial.Device)
-		}
+		parts = append(parts, "--serial", c.Serial.Device)
 		if c.Serial.Speed != defaults.Serial.Speed {
 			parts = append(parts, "--speed", fmt.Sprintf("%d", c.Serial.Speed))
 		}
