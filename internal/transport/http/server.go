@@ -3,6 +3,7 @@ package http
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -26,6 +27,7 @@ func StartServer(service *core.Service, hub *ws.Hub) (*echo.Echo, error) {
 
 	e := echo.New()
 	e.HideBanner = true
+	e.Logger.SetOutput(io.Discard)
 	e.Use(middleware.Recover())
 	e.Use(middleware.Gzip())
 	e.Use(cacheMiddleware())

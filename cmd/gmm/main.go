@@ -368,9 +368,9 @@ func announce(cfg config.Config) {
 			portSuffix = cfg.ListenAddr[idx:]
 		}
 	}
-	if cfg.RequireToken && cfg.Token != "" {
-		fmt.Printf("Token suffix:\n/?token=%s\n", cfg.Token)
-	}
+	// if cfg.RequireToken && cfg.Token != "" {
+	// 	fmt.Printf("Token suffix:\n/?token=%s\n", cfg.Token)
+	// }
 
 	addresses := netutil.DiscoverIPv4()
 	if len(addresses) == 0 {
@@ -385,5 +385,4 @@ func announce(cfg config.Config) {
 			fmt.Printf("http://%s%s/\n", addr, portSuffix)
 		}
 	}
-	fmt.Printf("Invocation: %s\n", cfg.Invocation())
 }

@@ -1,50 +1,36 @@
 # goModMaster
 
-Web-based Modbus master inspired by [QModMaster](https://sourceforge.net/projects/qmodmaster/); a TUI is planned.
+Single binary Modbus master client with tui/web interface. Inspired by [QModMaster](https://sourceforge.net/projects/qmodmaster/).
 
-![Screenshot of web UI](docs/img/screenshot.png)
+tui:
+
+![Screenshot of terminal UI](docs/img/tui.png)
+
+web:
+
+![Screenshot of web UI](docs/img/web.png)
 
 ## Features
 
 - [x] Read-only Modbus client (TCP + RTU)
+- [x] TUI mode
+- [ ] automatic polling
 - [ ] Write operations (planned)
-- [ ] TUI mode (planned)
 
 ## Install
 
 No install needed. Download the binary from latest [release](https://github.com/d21d3q/goModMaster/releases/latest) and run it.
 
 ## How to use
+Run either the TUI or the web UI:
 
-Launch the web UI:
-
-```sh
+```bash
+gmm
 gmm web
 ```
 
-Common flags: `--host/--port` for TCP, `--serial --framing --speed --databits --parity --stopbits` for RTU, and `--no-token` to skip auth. TCP is the default when no serial flags are provided, and serial flags cannot be combined with `--host/--port`. You can pass serial connection options up front, or start with defaults (RTU 9600/8N1) and adjust in the UI later. The UI shows the exact invocation string so you can reuse it verbatim.
+By default web UI is protected with a one-time token printed at startup; use `--no-token` to disable it.
 
-```bash
-Launch local web UI
+Connection and read defaults can be set at startup via CLI flags or adjusted in the UI. On exit, the app prints the current settings so you can resume with the same configuration later. 
 
-Usage:
-  gmm web [flags]
-
-Flags:
-  -h, --help            help for web
-      --listen string   listen address (default "0.0.0.0:8502")
-      --no-token        disable token requirement for web UI
-
-Global Flags:
-      --databits uint    serial data bits (default 8)
-      --framing string   serial framing (rtu, ascii) (default "rtu")
-      --host string      tcp host (default "127.0.0.1")
-      --parity string    serial parity (none, even, odd) (default "none")
-      --port int         tcp port (default 502)
-      --serial string    serial device path (enables serial mode) (default "/dev/ttyUSB0")
-      --speed uint       serial baud rate (default 9600)
-      --stopbits uint    serial stop bits (default 1)
-      --timeout int      request timeout (ms) (default 1000)
-      --unit-id uint     unit id (default 1)
-      --version          print version and exit
-```
+Use `--help` for full flag details.
