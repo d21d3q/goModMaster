@@ -16,6 +16,7 @@ import (
 	"gomodmaster/internal/netutil"
 	httptransport "gomodmaster/internal/transport/http"
 	"gomodmaster/internal/transport/ws"
+	"gomodmaster/internal/tui"
 	"gomodmaster/internal/version"
 
 	"github.com/spf13/cobra"
@@ -27,7 +28,7 @@ func main() {
 		Use:   "gmm",
 		Short: "goModMaster Modbus master",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("tui mode not implemented yet")
+			return tui.Run(cfg)
 		},
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true

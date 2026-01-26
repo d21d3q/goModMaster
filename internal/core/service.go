@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 	"syscall"
@@ -53,9 +54,17 @@ type ConnectionStatus struct {
 }
 
 func NewService(cfg config.Config) *Service {
+	return newService(cfg, defaultLogSize)
+}
+
+func NewServiceWithLogSize(cfg config.Config, logSize int) *Service {
+	return newService(cfg, logSize)
+}
+
+func newService(cfg config.Config, logSize int) *Service {
 	return &Service{
 		config: cfg,
-		logs:   NewLogBuffer(defaultLogSize),
+		logs:   NewLogBuffer(logSize),
 		events: make(chan Event, 32),
 	}
 }
@@ -305,7 +314,7 @@ func (s *Service) connectLoop(stop <-chan struct{}) {
 
 		attempt++
 		s.logInfo(fmt.Sprintf("connect attempt %d: %s", attempt, connectionSummary(cfg)))
-		client, err := newClient(cfg)
+		client, err := newClient(cfg, s)
 		if err == nil {
 			err = client.Open()
 		}
@@ -412,7 +421,7 @@ func applyAddressBase(addr uint16, base config.AddressBase) uint16 {
 	return addr
 }
 
-func newClient(cfg config.Config) (*modbus.ModbusClient, error) {
+func newClient(cfg config.Config, service *Service) (*modbus.ModbusClient, error) {
 	var url string
 	clientConfig := &modbus.ClientConfiguration{}
 
@@ -431,6 +440,9 @@ func newClient(cfg config.Config) (*modbus.ModbusClient, error) {
 
 	clientConfig.URL = url
 	clientConfig.Timeout = time.Duration(cfg.TimeoutMs) * time.Millisecond
+	if service != nil {
+		clientConfig.Logger = log.New(&modbusLogWriter{service: service}, "", 0)
+	}
 
 	client, err := modbus.NewClient(clientConfig)
 	if err != nil {
@@ -438,6 +450,18 @@ func newClient(cfg config.Config) (*modbus.ModbusClient, error) {
 	}
 	_ = client.SetUnitId(cfg.UnitID)
 	return client, nil
+}
+
+type modbusLogWriter struct {
+	service *Service
+}
+
+func (w *modbusLogWriter) Write(p []byte) (int, error) {
+	msg := strings.TrimSpace(string(p))
+	if msg != "" {
+		w.service.logInfo("modbus: " + msg)
+	}
+	return len(p), nil
 }
 
 func connectionSummary(cfg config.Config) string {

@@ -110,7 +110,18 @@ func DefaultConfig() Config {
 }
 
 func (c Config) Invocation() string {
-	parts := []string{"gmm", "web"}
+	return c.invocation(true)
+}
+
+func (c Config) InvocationTUI() string {
+	return c.invocation(false)
+}
+
+func (c Config) invocation(includeWeb bool) string {
+	parts := []string{"gmm"}
+	if includeWeb {
+		parts = append(parts, "web")
+	}
 	defaults := DefaultConfig()
 	if c.Protocol == ProtocolRTU {
 		parts = append(parts, "--serial", c.Serial.Device)
@@ -137,7 +148,7 @@ func (c Config) Invocation() string {
 	if c.UnitID != defaults.UnitID {
 		parts = append(parts, "--unit-id", fmt.Sprintf("%d", c.UnitID))
 	}
-	if !c.RequireToken {
+	if includeWeb && !c.RequireToken {
 		parts = append(parts, "--no-token")
 	}
 	return strings.Join(parts, " ")
