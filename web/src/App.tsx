@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AppLayout from './components/AppLayout'
 import UnauthorizedPanel from './components/UnauthorizedPanel'
 import { apiPost, buildJsonHeaders, fetchJson } from './lib/api'
@@ -9,6 +9,7 @@ import type { LogEntry, ReadKind, ReadResult, Stats, WsEvent } from './view-mode
 type ConfigResponse = {
   config: Config
   invocation: string
+  invocationFull: string
 }
 
 type PendingRead = {
@@ -22,6 +23,7 @@ function App() {
   const token = new URLSearchParams(window.location.search).get('token')
   const [config, setConfig] = useState<Config | null>(null)
   const [invocation, setInvocation] = useState('')
+  const [invocationFull, setInvocationFull] = useState('')
   const [selectedKind, setSelectedKind] = useState<ReadKind>('holding_registers')
   const [addressInput, setAddressInput] = useState('0')
   const [quantity, setQuantity] = useState(1)
@@ -39,6 +41,14 @@ function App() {
   const [showLogs, setShowLogs] = useState(false)
   const [pendingRead, setPendingRead] = useState<PendingRead | null>(null)
   const [authBlocked, setAuthBlocked] = useState(() => window.location.hash === '#/401')
+  const defaultsApplied = useRef(false)
+
+  const formatReadAddress = (address: number, format: number) => {
+    if (format === 16) {
+      return `0x${address.toString(16).toUpperCase()}`
+    }
+    return String(address)
+  }
 
   const handleUnauthorized = useCallback(() => {
     setAuthBlocked(true)
@@ -59,6 +69,13 @@ function App() {
       .then((data: ConfigResponse) => {
         setConfig(data.config)
         setInvocation(data.invocation)
+        setInvocationFull(data.invocationFull)
+        if (!defaultsApplied.current) {
+          setSelectedKind(data.config.readKind)
+          setAddressInput(formatReadAddress(data.config.readAddress, data.config.addressFormat))
+          setQuantity(data.config.readQuantity)
+          defaultsApplied.current = true
+        }
       })
       .catch(() => undefined)
 
@@ -127,6 +144,7 @@ function App() {
       .then((data: ConfigResponse) => {
         setConfig(data.config)
         setInvocation(data.invocation)
+        setInvocationFull(data.invocationFull)
         if (reconnect) {
           return apiPost('/api/disconnect', token, handleUnauthorized).then(() =>
             apiPost('/api/connect', token, handleUnauthorized),
@@ -188,6 +206,15 @@ function App() {
       quantity,
       unitId: config.unitId,
     }
+    updateConfig(
+      {
+        ...config,
+        readKind: selectedKind,
+        readAddress: parsedAddress,
+        readQuantity: quantity,
+      },
+      false,
+    )
 
     if (!connected && autoConnect) {
       setPendingRead(payload)
@@ -263,6 +290,7 @@ function App() {
       stats={stats}
       version={version}
       invocation={invocation}
+      invocationFull={invocationFull}
       columns={columns}
       selectedKind={selectedKind}
       addressInput={addressInput}

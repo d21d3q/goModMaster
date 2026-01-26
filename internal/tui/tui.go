@@ -39,7 +39,12 @@ func Run(cfg config.Config) error {
 		return err
 	}
 	if m, ok := final.(model); ok && m.printInvocation {
-		fmt.Println(m.cfg.InvocationTUI())
+		connectionOnly := m.cfg.InvocationTUI()
+		fmt.Println(connectionOnly)
+		full := m.cfg.InvocationFullTUI()
+		if full != connectionOnly {
+			fmt.Println(full)
+		}
 	}
 	return nil
 }

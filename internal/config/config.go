@@ -67,6 +67,9 @@ type Config struct {
 	Protocol      Protocol        `json:"protocol"`
 	UnitID        uint8           `json:"unitId"`
 	TimeoutMs     int64           `json:"timeoutMs"`
+	ReadKind      string          `json:"readKind"`
+	ReadAddress   uint16          `json:"readAddress"`
+	ReadQuantity  uint16          `json:"readQuantity"`
 	AddressBase   AddressBase     `json:"addressBase"`
 	AddressFormat ValueBase       `json:"addressFormat"`
 	ValueBase     ValueBase       `json:"valueBase"`
@@ -83,6 +86,9 @@ func DefaultConfig() Config {
 		Protocol:      ProtocolTCP,
 		UnitID:        1,
 		TimeoutMs:     int64((1 * time.Second).Milliseconds()),
+		ReadKind:      "holding_registers",
+		ReadAddress:   0,
+		ReadQuantity:  1,
 		AddressBase:   AddressBaseZero,
 		AddressFormat: ValueBaseDec,
 		ValueBase:     ValueBaseDec,
@@ -110,46 +116,200 @@ func DefaultConfig() Config {
 }
 
 func (c Config) Invocation() string {
-	return c.invocation(true)
+	return c.invocation(true, false)
 }
 
 func (c Config) InvocationTUI() string {
-	return c.invocation(false)
+	return c.invocation(false, false)
 }
 
-func (c Config) invocation(includeWeb bool) string {
+func (c Config) InvocationFull() string {
+	return c.invocation(true, true)
+}
+
+func (c Config) InvocationFullTUI() string {
+	return c.invocation(false, true)
+}
+
+func (c Config) invocation(includeWeb bool, includeAll bool) string {
 	parts := []string{"gmm"}
 	if includeWeb {
 		parts = append(parts, "web")
 	}
 	defaults := DefaultConfig()
-	if c.Protocol == ProtocolRTU {
-		parts = append(parts, "--serial", c.Serial.Device)
-		if c.Serial.Speed != defaults.Serial.Speed {
-			parts = append(parts, "--speed", fmt.Sprintf("%d", c.Serial.Speed))
+	if includeAll {
+		if c.Protocol == ProtocolRTU {
+			parts = append(parts, "--serial", c.Serial.Device)
+			if c.Serial.Speed != defaults.Serial.Speed {
+				parts = append(parts, "--speed", fmt.Sprintf("%d", c.Serial.Speed))
+			}
+			if c.Serial.DataBits != defaults.Serial.DataBits {
+				parts = append(parts, "--databits", fmt.Sprintf("%d", c.Serial.DataBits))
+			}
+			if c.Serial.Parity != defaults.Serial.Parity {
+				parts = append(parts, "--parity", c.Serial.Parity)
+			}
+			if c.Serial.StopBits != defaults.Serial.StopBits {
+				parts = append(parts, "--stopbits", fmt.Sprintf("%d", c.Serial.StopBits))
+			}
+		} else {
+			if c.TCP.Host != defaults.TCP.Host {
+				parts = append(parts, "--host", c.TCP.Host)
+			}
+			if c.TCP.Port != defaults.TCP.Port {
+				parts = append(parts, "--port", fmt.Sprintf("%d", c.TCP.Port))
+			}
 		}
-		if c.Serial.DataBits != defaults.Serial.DataBits {
-			parts = append(parts, "--databits", fmt.Sprintf("%d", c.Serial.DataBits))
+		if c.UnitID != defaults.UnitID {
+			parts = append(parts, "--unit-id", fmt.Sprintf("%d", c.UnitID))
 		}
-		if c.Serial.Parity != defaults.Serial.Parity {
-			parts = append(parts, "--parity", c.Serial.Parity)
+		if c.TimeoutMs != defaults.TimeoutMs {
+			parts = append(parts, "--timeout", fmt.Sprintf("%d", c.TimeoutMs))
 		}
-		if c.Serial.StopBits != defaults.Serial.StopBits {
-			parts = append(parts, "--stopbits", fmt.Sprintf("%d", c.Serial.StopBits))
+		if c.ReadAddress != defaults.ReadAddress {
+			parts = append(parts, "--address", formatReadAddress(c.ReadAddress, c.AddressFormat))
+		}
+		if c.ReadQuantity != defaults.ReadQuantity {
+			parts = append(parts, "--count", fmt.Sprintf("%d", c.ReadQuantity))
+		}
+		if c.ReadKind != defaults.ReadKind {
+			parts = append(parts, "--function", readKindCode(c.ReadKind))
+		}
+		if c.AddressBase != defaults.AddressBase {
+			parts = append(parts, "--address-base", fmt.Sprintf("%d", c.AddressBase))
+		}
+		if c.AddressFormat != defaults.AddressFormat {
+			parts = append(parts, "--address-format", formatBaseFlag(c.AddressFormat))
+		}
+		if c.ValueBase != defaults.ValueBase {
+			parts = append(parts, "--value-base", formatBaseFlag(c.ValueBase))
+		}
+		defaultDecoders := map[DecoderType]DecoderConfig{}
+		for _, dec := range defaults.Decoders {
+			defaultDecoders[dec.Type] = dec
+		}
+		for _, decoder := range c.Decoders {
+			if !decoder.Enabled {
+				continue
+			}
+			flag, value, ok := decoderInvocation(decoder, defaultDecoders[decoder.Type])
+			if ok {
+				parts = append(parts, flag, value)
+			}
+		}
+		if includeWeb {
+			if c.ListenAddr != defaults.ListenAddr {
+				parts = append(parts, "--listen", c.ListenAddr)
+			}
+			if !c.RequireToken {
+				parts = append(parts, "--no-token")
+			}
 		}
 	} else {
-		if c.TCP.Host != defaults.TCP.Host {
-			parts = append(parts, "--host", c.TCP.Host)
+		if c.Protocol == ProtocolRTU {
+			parts = append(parts, "--serial", c.Serial.Device)
+			if c.Serial.Speed != defaults.Serial.Speed {
+				parts = append(parts, "--speed", fmt.Sprintf("%d", c.Serial.Speed))
+			}
+			if c.Serial.DataBits != defaults.Serial.DataBits {
+				parts = append(parts, "--databits", fmt.Sprintf("%d", c.Serial.DataBits))
+			}
+			if c.Serial.Parity != defaults.Serial.Parity {
+				parts = append(parts, "--parity", c.Serial.Parity)
+			}
+			if c.Serial.StopBits != defaults.Serial.StopBits {
+				parts = append(parts, "--stopbits", fmt.Sprintf("%d", c.Serial.StopBits))
+			}
+		} else {
+			if c.TCP.Host != defaults.TCP.Host {
+				parts = append(parts, "--host", c.TCP.Host)
+			}
+			if c.TCP.Port != defaults.TCP.Port {
+				parts = append(parts, "--port", fmt.Sprintf("%d", c.TCP.Port))
+			}
 		}
-		if c.TCP.Port != defaults.TCP.Port {
-			parts = append(parts, "--port", fmt.Sprintf("%d", c.TCP.Port))
+		if c.UnitID != defaults.UnitID {
+			parts = append(parts, "--unit-id", fmt.Sprintf("%d", c.UnitID))
 		}
-	}
-	if c.UnitID != defaults.UnitID {
-		parts = append(parts, "--unit-id", fmt.Sprintf("%d", c.UnitID))
-	}
-	if includeWeb && !c.RequireToken {
-		parts = append(parts, "--no-token")
+		if includeWeb && !c.RequireToken {
+			parts = append(parts, "--no-token")
+		}
 	}
 	return strings.Join(parts, " ")
+}
+
+func readKindCode(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "coils":
+		return "01"
+	case "discrete_inputs":
+		return "02"
+	case "holding_registers":
+		return "03"
+	case "input_registers":
+		return "04"
+	default:
+		if kind != "" {
+			return kind
+		}
+		return "03"
+	}
+}
+
+func formatReadAddress(address uint16, format ValueBase) string {
+	if format == ValueBaseHex {
+		return fmt.Sprintf("0x%X", address)
+	}
+	return fmt.Sprintf("%d", address)
+}
+
+func formatBaseFlag(base ValueBase) string {
+	if base == ValueBaseHex {
+		return "hex"
+	}
+	return "dec"
+}
+
+func decoderInvocation(decoder DecoderConfig, defaults DecoderConfig) (string, string, bool) {
+	if !decoder.Enabled {
+		return "", "", false
+	}
+	flag := ""
+	switch decoder.Type {
+	case DecoderUint16:
+		flag = "--u16"
+	case DecoderInt16:
+		flag = "--i16"
+	case DecoderUint32:
+		flag = "--u32"
+	case DecoderInt32:
+		flag = "--i32"
+	case DecoderFloat32:
+		flag = "--f32"
+	default:
+		return "", "", false
+	}
+	parts := []string{}
+	if decoder.Endianness != defaults.Endianness {
+		if decoder.Endianness == EndianLittle {
+			parts = append(parts, "le")
+		} else {
+			parts = append(parts, "be")
+		}
+	}
+	if decoder.WordOrder != defaults.WordOrder {
+		if decoder.WordOrder == WordLowFirst {
+			parts = append(parts, "lf")
+		} else {
+			parts = append(parts, "hf")
+		}
+	}
+	if len(parts) == 0 {
+		if defaults.Endianness == EndianLittle {
+			parts = append(parts, "le")
+		} else {
+			parts = append(parts, "be")
+		}
+	}
+	return flag, strings.Join(parts, ","), true
 }

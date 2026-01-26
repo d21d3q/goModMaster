@@ -15,8 +15,9 @@ import (
 )
 
 type configResponse struct {
-	Config     config.Config `json:"config"`
-	Invocation string        `json:"invocation"`
+	Config            config.Config `json:"config"`
+	Invocation        string        `json:"invocation"`
+	InvocationFull    string        `json:"invocationFull"`
 }
 
 type errorResponse struct {
@@ -34,7 +35,11 @@ type versionResponse struct {
 func routes(e *echo.Echo, service *core.Service, hub *ws.Hub) {
 	e.GET("/api/config", func(c echo.Context) error {
 		cfg := service.Config()
-		return c.JSON(http.StatusOK, configResponse{Config: cfg, Invocation: cfg.Invocation()})
+		return c.JSON(http.StatusOK, configResponse{
+			Config:         cfg,
+			Invocation:     cfg.Invocation(),
+			InvocationFull: cfg.InvocationFull(),
+		})
 	})
 
 	e.POST("/api/config", func(c echo.Context) error {
@@ -47,7 +52,11 @@ func routes(e *echo.Echo, service *core.Service, hub *ws.Hub) {
 			cfg.Token = current.Token
 		}
 		service.UpdateConfig(cfg)
-		return c.JSON(http.StatusOK, configResponse{Config: cfg, Invocation: cfg.Invocation()})
+		return c.JSON(http.StatusOK, configResponse{
+			Config:         cfg,
+			Invocation:     cfg.Invocation(),
+			InvocationFull: cfg.InvocationFull(),
+		})
 	})
 
 	e.POST("/api/connect", func(c echo.Context) error {

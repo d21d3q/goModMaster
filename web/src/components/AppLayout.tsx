@@ -34,6 +34,7 @@ type AppLayoutProps = {
   stats: Stats
   version: string
   invocation: string
+  invocationFull: string
   columns: number
   selectedKind: ReadKind
   addressInput: string
@@ -69,6 +70,7 @@ function AppLayout({
   stats,
   version,
   invocation,
+  invocationFull,
   columns,
   selectedKind,
   addressInput,
@@ -243,10 +245,19 @@ function AppLayout({
                 </a>
               </span>
             </div>
-            {invocation && (
-              <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
-                <code>{invocation}</code>
-              </pre>
+            {(invocation || invocationFull) && (
+              <div className="grid gap-2">
+                {invocation && (
+                  <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                    <code>{invocation}</code>
+                  </pre>
+                )}
+                {invocationFull && invocationFull !== invocation && (
+                  <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                    <code>{invocationFull}</code>
+                  </pre>
+                )}
+              </div>
             )}
           </div>
         </footer>

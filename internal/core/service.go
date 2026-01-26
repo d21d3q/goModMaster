@@ -405,13 +405,26 @@ func isConnectionError(err error) bool {
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
+	if errors.Is(err, syscall.ENODEV) || errors.Is(err, syscall.ENXIO) || errors.Is(err, syscall.EIO) {
+		return true
+	}
+	if errors.Is(err, syscall.ENOENT) {
+		return true
+	}
 	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNABORTED) {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "broken pipe") ||
 		strings.Contains(msg, "connection reset") ||
-		strings.Contains(msg, "use of closed network connection")
+		strings.Contains(msg, "use of closed network connection") ||
+		strings.Contains(msg, "device not configured") ||
+		strings.Contains(msg, "input/output error") ||
+		strings.Contains(msg, "i/o error") ||
+		strings.Contains(msg, "no such file or directory") ||
+		strings.Contains(msg, "file not found") ||
+		strings.Contains(msg, "device not found") ||
+		strings.Contains(msg, "port is closed")
 }
 
 func applyAddressBase(addr uint16, base config.AddressBase) uint16 {

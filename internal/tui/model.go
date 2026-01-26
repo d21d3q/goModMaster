@@ -60,6 +60,16 @@ var readKinds = []readKindOption{
 	{label: "Input Registers", kind: core.ReadInput, code: "04"},
 }
 
+func readKindIndex(kind string) int {
+	normalized := strings.TrimSpace(strings.ToLower(kind))
+	for idx, option := range readKinds {
+		if normalized == strings.ToLower(string(option.kind)) {
+			return idx
+		}
+	}
+	return 0
+}
+
 type model struct {
 	cfg                config.Config
 	service            *core.Service
@@ -115,9 +125,12 @@ func newModel(cfg config.Config, service *core.Service) model {
 		cfg:           cfg,
 		service:       service,
 		view:          viewMain,
-		addressValue:  "0",
-		quantityValue: "1",
+		addressValue:  fmt.Sprintf("%d", cfg.ReadAddress),
+		quantityValue: fmt.Sprintf("%d", cfg.ReadQuantity),
 		unitValue:     fmt.Sprintf("%d", cfg.UnitID),
+		selectedKindIdx: func() int {
+			return readKindIndex(cfg.ReadKind)
+		}(),
 		logLimit:      logBufferSize,
 		autoConnect:   true,
 		status:        service.StatusSnapshot(),
@@ -392,12 +405,15 @@ func (m model) applyEdit() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.addressValue = value
+		m.cfg.ReadAddress = *parseAddress(value)
 	case focusQuantity:
 		if !validQuantity(value) {
 			m.editError = "Quantity must be 1-65535"
 			return m, nil
 		}
 		m.quantityValue = value
+		parsed, _ := parseUint16(value)
+		m.cfg.ReadQuantity = parsed
 	case focusUnitID:
 		if !validUnitID(value) {
 			m.editError = "Unit ID must be 0-255"
@@ -790,6 +806,7 @@ func (m model) handleFunctionKeys(key string) (tea.Model, tea.Cmd) {
 		idx := int(key[0] - '1')
 		if idx >= 0 && idx < len(readKinds) {
 			m.selectedKindIdx = idx
+			m.cfg.ReadKind = string(readKinds[idx].kind)
 			m.view = viewMain
 		}
 		return m, nil
@@ -805,6 +822,7 @@ func (m model) handleFunctionKeys(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		m.selectedKindIdx = m.functionCursor
+		m.cfg.ReadKind = string(readKinds[m.functionCursor].kind)
 		m.view = viewMain
 		return m, nil
 	}

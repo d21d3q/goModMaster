@@ -118,14 +118,6 @@ func renderResultPanel(m model, panelWidth int) string {
 	lines = append(lines, "")
 	lines = append(lines, renderValueTable(m, panelWidth))
 
-	if len(result.Decoded) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, titleStyle.Render("Decoded"))
-		for _, dec := range result.Decoded {
-			lines = append(lines, fmt.Sprintf("- %s: %v", dec.Type, dec.Value))
-		}
-	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -209,7 +201,7 @@ func renderHelp(m model) string {
 		"  [s] Connection settings",
 		"  [d] Decoder settings",
 		"  [l] Raw logs",
-		"  [q] Quit (prints invocation)",
+		"  [q] Quit (prints invocations)",
 	}
 	box := renderBox("help", strings.Join(lines, "\n"), m.width)
 	return renderScreen(m, box)

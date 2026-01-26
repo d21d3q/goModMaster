@@ -9,6 +9,9 @@ export type Config = {
   protocol: 'tcp' | 'rtu'
   unitId: number
   timeoutMs: number
+  readKind: 'coils' | 'discrete_inputs' | 'holding_registers' | 'input_registers'
+  readAddress: number
+  readQuantity: number
   addressBase: number
   addressFormat: number
   valueBase: number
