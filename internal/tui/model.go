@@ -237,7 +237,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.view == viewConnection {
 		switch key {
-		case "esc", "s":
+		case "esc", "enter", "s":
 			m.view = viewMain
 			return m, nil
 		case "g":

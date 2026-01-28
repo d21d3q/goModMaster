@@ -55,9 +55,6 @@ func renderConnectionSummary(m model) string {
 		fmt.Sprintf("timeout %dms", m.cfg.TimeoutMs),
 		fmt.Sprintf("auto %s", onOff(m.autoConnect)),
 	}
-	if m.status.LastError != "" {
-		parts = append(parts, errorStyle.Render(m.status.LastError))
-	}
 	return strings.Join(parts, " | ")
 }
 
@@ -255,9 +252,6 @@ func renderConnectionDetails(m model) string {
 		renderConnField(m, focusConnTimeout, "timeo[u]t", fmt.Sprintf("%d ms", m.cfg.TimeoutMs)),
 		renderConnField(m, focusConnUnitID, "unit-[i]d", fmt.Sprintf("%d", m.cfg.UnitID)),
 	)
-	if m.status.LastError != "" {
-		lines = append(lines, "", errorStyle.Render(fmt.Sprintf("Last error: %s", m.status.LastError)))
-	}
 	box := renderBox("connection settings", strings.Join(lines, "\n"), m.width)
 	return renderScreen(m, box)
 }
@@ -280,9 +274,6 @@ func renderFunctionSelect(m model) string {
 func renderScreen(m model, content string) string {
 	status := renderStatusClue(m)
 	commands := renderCommandsLine(m)
-	if m.editActive {
-		return strings.Join([]string{content, status, commands}, "\n")
-	}
 	body := padToHeight(content, m.height-2)
 	return strings.Join([]string{body, status, commands}, "\n")
 }
@@ -290,11 +281,14 @@ func renderScreen(m model, content string) string {
 func renderStatusClue(m model) string {
 	status := fmt.Sprintf("Status: %s", connectionLabel(m.status))
 	if m.status.LastError != "" {
-		status = fmt.Sprintf("%s | %s", status, m.status.LastError)
+		status = fmt.Sprintf("%s | %s", status, errorStyle.Render(m.status.LastError))
 	}
 	clue := ""
 	if m.editActive {
-		clue = fmt.Sprintf("Editing %s: enter=save  esc=cancel", fieldLabel(m.editField))
+		clue = fmt.Sprintf("Editing %s", fieldLabel(m.editField))
+		if m.editField == focusAddress {
+			clue = fmt.Sprintf("%s | prefix with 0x for hex", clue)
+		}
 	}
 	if err := footerError(m); err != "" {
 		clue = errorStyle.Render(err)
@@ -307,11 +301,11 @@ func renderStatusClue(m model) string {
 
 func renderCommandsLine(m model) string {
 	if m.editActive {
-		return ""
+		return "[enter] save  [esc] cancel"
 	}
 	switch m.view {
 	case viewConnection:
-		return "[esc] back"
+		return "[enter] back  [esc] back"
 	case viewFunctionSelect:
 		return "[enter] select  [esc] back"
 	case viewDeviceSelect:
