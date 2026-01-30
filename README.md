@@ -34,3 +34,7 @@ By default web UI is protected with a one-time token printed at startup; use `--
 Connection and read defaults can be set at startup via CLI flags or adjusted in the UI. On exit, the app prints the current settings so you can resume with the same configuration later. 
 
 Use `--help` for full flag details.
+
+# Disclaimer
+
+This tool has been vibecoded. 
